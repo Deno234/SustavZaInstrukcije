@@ -10,6 +10,7 @@ activityCompose = "1.10.1"
 composeBom = "2025.03.00"
 google-services = "4.4.2"
 firebase-bom = "33.10.0"
+core-splashscreen = "1.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -26,6 +27,7 @@ androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-splashcreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "core-splashscreen"}
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom"}
 firebase-auth = { module = "com.google.firebase:firebase-auth"}
 firebase-firestore = { module = "com.google.firebase:firebase-firestore"}
