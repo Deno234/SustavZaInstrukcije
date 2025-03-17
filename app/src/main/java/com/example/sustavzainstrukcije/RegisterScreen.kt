@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -64,7 +65,7 @@ fun RegisterScreen(
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
-    var role by rememberSaveable { mutableStateOf("student") }
+    var role by rememberSaveable { mutableStateOf("instructor") }
     var subjects by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var availableTime by rememberSaveable { mutableStateOf(emptyMap<String, List<String>>())}
     var passwordVisible by remember { mutableStateOf(false) }
@@ -326,19 +327,19 @@ fun DaySelector(
 @Composable
 private fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
-    onHoursUpdated: (Map<String, List<String>>) -> Unit
+    onHoursUpdated: (Map<String, List<String>>) -> Unit,
 ) {
     var showDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf("") }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
+    var history by remember { mutableStateOf<List<Map<String, List<String>>>>(emptyList()) } // History of available hours
     val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
     Column {
         Text("Available Hours:", style = MaterialTheme.typography.labelMedium)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-
             Column {
                 Button(onClick = { showDialog = true }) {
                     Text("Add Hours")
@@ -346,7 +347,14 @@ private fun AvailableHoursInput(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Button(onClick = { }) {
+                Button(onClick = {
+                    if (history.isNotEmpty()) {
+                        // Get the last state in history and update to it
+                        val lastState = history.last()
+                        onHoursUpdated(lastState) // Update to the previous state
+                        history = history.dropLast(1) // Remove the last state from history
+                    }
+                }) {
                     Text("Undo")
                 }
             }
@@ -395,6 +403,10 @@ private fun AvailableHoursInput(
                         val currentSlots = updated[selectedDay] ?: emptyList()
                         val newSlots = (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
                         updated[selectedDay] = newSlots
+
+                        // Save the current state before making the update
+                        history = history + listOf(availableHours)
+
                         onHoursUpdated(updated)
                         showDialog = false
                     }
@@ -410,6 +422,8 @@ private fun AvailableHoursInput(
         )
     }
 }
+
+
 
 @Composable
 private fun TimePicker(
