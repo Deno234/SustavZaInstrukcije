@@ -19,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,15 +34,30 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LoginScreen(
-                        onLoginClick = {},
-                        onRegisterClick = {}
-                    )
+                    val navController = rememberNavController()
+                    NavHost(navController = navController, startDestination = "login") {
+                        composable("login") {
+                            LoginScreen(
+                                onLoginClick = {},
+                                onRegisterClick = {
+                                    navController.navigate("register")
+                                }
+                            )
+                        }
+                        composable("register") {
+                            RegisterScreen(
+                                onRegistrationComplete = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
