@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -324,6 +323,7 @@ fun DaySelector(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
@@ -333,7 +333,6 @@ private fun AvailableHoursInput(
     var selectedDay by remember { mutableStateOf("") }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
-    var history by remember { mutableStateOf<List<Map<String, List<String>>>>(emptyList()) } // History of available hours
     val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
     Column {
@@ -344,30 +343,36 @@ private fun AvailableHoursInput(
                 Button(onClick = { showDialog = true }) {
                     Text("Add Hours")
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(onClick = {
-                    if (history.isNotEmpty()) {
-                        // Get the last state in history and update to it
-                        val lastState = history.last()
-                        onHoursUpdated(lastState) // Update to the previous state
-                        history = history.dropLast(1) // Remove the last state from history
-                    }
-                }) {
-                    Text("Undo")
-                }
             }
 
-            // Make the days list scrollable and limit height
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .height(100.dp) // Adjust this height as needed
+                    .height(100.dp)
             ) {
                 items(orderedDays) { day ->
-                    val hours = availableHours[day]?.joinToString(", ") ?: ""
-                    Text("$day: $hours", modifier = Modifier.padding(4.dp))
+                    Text("$day:", modifier = Modifier.padding(4.dp))
+
+                    availableHours[day]?.forEach { timeSlot ->
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            InputChip(
+                                selected = false,
+                                onClick = {},
+                                label = { Text(timeSlot) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        val updated = availableHours.toMutableMap()
+                                        val currentSlots = updated[day]?.toMutableList() ?: mutableListOf()
+                                        currentSlots.remove(timeSlot)
+                                        updated[day] = currentSlots
+                                        onHoursUpdated(updated)
+                                    }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Remove")
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -403,10 +408,6 @@ private fun AvailableHoursInput(
                         val currentSlots = updated[selectedDay] ?: emptyList()
                         val newSlots = (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
                         updated[selectedDay] = newSlots
-
-                        // Save the current state before making the update
-                        history = history + listOf(availableHours)
-
                         onHoursUpdated(updated)
                         showDialog = false
                     }
@@ -422,8 +423,6 @@ private fun AvailableHoursInput(
         )
     }
 }
-
-
 
 @Composable
 private fun TimePicker(
