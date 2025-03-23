@@ -24,10 +24,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.os.registerForAllProfilingResults
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
+import com.example.sustavzainstrukcije.ui.screens.PrijavaScreen
+import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.Identity
@@ -42,7 +44,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var oneTapClient: SignInClient
     private lateinit var db: FirebaseFirestore
-    private var navigateToMain: () -> Unit = {}
+    private var navigateToHome: () -> Unit = {}
     private var navigateToGoogleRegistration: () -> Unit = {}
 
     private val signInLauncher =
@@ -95,13 +97,13 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
 
-                    navigateToMain = { navController.navigate("main") }
+                    navigateToHome = { navController.navigate("home") }
                     navigateToGoogleRegistration = { navController.navigate(("googleRegistration")) }
 
                     NavHost(navController = navController, startDestination = "login") {
                         composable("login") {
                             LoginScreen(
-                                onLoginClick = {},
+                                onLoginClick = {navController.navigate("prijava")},
                                 onRegisterClick = {
                                     navController.navigate("register")
                                 },
@@ -118,14 +120,22 @@ class MainActivity : ComponentActivity() {
                         composable("googleRegistration") {
                             GoogleRegistrationScreen(
                                 onRegistrationComplete = {
-                                    navController.navigate("login")
+                                    navController.navigate("home")
                                 }
                             )
                         }
-                        /*
-                        composable("main") {
-                            MainScreen()
-                        }*/
+
+                        composable("home") {
+                            HomeScreen()
+                        }
+
+                        composable("prijava") {
+                            PrijavaScreen(
+                                onPrijavaComplete = {
+                                    navController.navigate("home")
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -133,27 +143,34 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun signInWithGoogle() {
-        val signInRequest = BeginSignInRequest.builder()
-            .setGoogleIdTokenRequestOptions(
-                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                    .setSupported(true)
-                    .setServerClientId(getString(R.string.default_web_client_id))
-                    .setFilterByAuthorizedAccounts(false)
-                    .build())
-            .build()
+        val signInRequest = System.getenv("SERVER_CLIENT_ID")?.let {
+            BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
+                .setSupported(true)
+                .setServerClientId(it)
+                .setFilterByAuthorizedAccounts(false)
+                .build()
+        }?.let {
+            BeginSignInRequest.builder()
+                .setGoogleIdTokenRequestOptions(
+                    it
+                )
+                .build()
+        }
 
-        oneTapClient.beginSignIn(signInRequest)
-            .addOnSuccessListener(this) { result ->
-                try {
-                    signInLauncher.launch(IntentSenderRequest.Builder(result.pendingIntent.intentSender).build())
-                } catch (e: IntentSender.SendIntentException) {
-                    Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage}")
+        if (signInRequest != null) {
+            oneTapClient.beginSignIn(signInRequest)
+                .addOnSuccessListener(this) { result ->
+                    try {
+                        signInLauncher.launch(IntentSenderRequest.Builder(result.pendingIntent.intentSender).build())
+                    } catch (e: IntentSender.SendIntentException) {
+                        Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage}")
+                    }
                 }
-            }
-            .addOnFailureListener(this) { e ->
-                // No Google Accounts found. Just continue presenting the signed-out UI.
-                Log.d(TAG, e.localizedMessage)
-            }
+                .addOnFailureListener(this) { e ->
+                    // No Google Accounts found. Just continue presenting the signed-out UI.
+                    e.localizedMessage?.let { Log.d(TAG, it) }
+                }
+        }
     }
 
     private fun checkUserInFirestore(userId: String?) {
@@ -166,7 +183,7 @@ class MainActivity : ComponentActivity() {
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     // User exists in Firestore, navigate to main screen
-                    navigateToMain()
+                    navigateToHome()
                 } else {
                     // User doesn't exist in Firestore, navigate to Google registration screen
                     navigateToGoogleRegistration()
@@ -239,5 +256,16 @@ fun LoginScreen(
             Text("Google Sign In")
         }
 
+    }
+}
+
+@Composable
+fun HomeScreen() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Welcome to the Home Screen!")
     }
 }
