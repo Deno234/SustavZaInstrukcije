@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
-import com.example.sustavzainstrukcije.ui.screens.LoginScreen
+import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
@@ -37,7 +37,6 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val viewModel: AuthViewModel = viewModel()
 
-                // Pass navController to viewModel
                 LaunchedEffect(navController) {
                     viewModel.setNavController(navController)
                 }
@@ -69,7 +68,7 @@ fun LoginScreenPreview() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            LoginScreen(
+            MainScreen(
                 onLoginClick = {},
                 onRegisterClick = {},
                 onGoogleSignInClick = {}

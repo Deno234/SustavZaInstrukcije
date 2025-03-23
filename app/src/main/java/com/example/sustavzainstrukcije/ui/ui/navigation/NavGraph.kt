@@ -8,8 +8,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
+import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
-import com.example.sustavzainstrukcije.ui.screens.PrijavaScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
@@ -19,10 +19,10 @@ fun NavGraph(
     onGoogleSignIn: () -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
-    NavHost(navController = navController, startDestination = "login") {
-        composable("login") {
-            LoginScreen(
-                onLoginClick = { navController.navigate("prijava") },
+    NavHost(navController = navController, startDestination = "main") {
+        composable("main") {
+            MainScreen(
+                onLoginClick = { navController.navigate("login") },
                 onRegisterClick = { navController.navigate("register") },
                 onGoogleSignInClick = onGoogleSignIn
             )
@@ -32,9 +32,9 @@ fun NavGraph(
                 onRegistrationComplete = { navController.popBackStack() }
             )
         }
-        composable("prijava") {
-            PrijavaScreen(
-                onPrijavaComplete = { navController.navigate("home") }
+        composable("login") {
+            LoginScreen(
+                onLoginComplete = { navController.navigate("home") }
             )
         }
         composable("googleRegistration") {

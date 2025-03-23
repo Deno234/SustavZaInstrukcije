@@ -210,7 +210,7 @@ private fun RoleSelector(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SubjectsInput(
     subjects: List<String>,
