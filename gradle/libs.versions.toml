@@ -19,6 +19,7 @@ play-services-auth = "1.3.0"
 google-id = "1.1.1"
 google-auth = "21.3.0"
 media3CommonKtx = "1.5.1"
+dotenv-kotlin = "6.5.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -51,6 +52,7 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging"}
 firebase-database = { module = "com.google.firebase:firebase-database"}
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-ktx", version.ref = "media3CommonKtx" }
+dotenv-kotlin = { group = "io.github.cdimascio", name = "dotenv-kotlin", version.ref = "dotenv-kotlin"}
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

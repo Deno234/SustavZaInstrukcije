@@ -38,6 +38,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import com.example.sustavzainstrukcije.BuildConfig
 
 class MainActivity : ComponentActivity() {
 
@@ -143,13 +144,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun signInWithGoogle() {
-        val signInRequest = System.getenv("SERVER_CLIENT_ID")?.let {
+        val serverClientId = BuildConfig.SERVER_CLIENT_ID
+
+        val signInRequest = serverClientId.let {
             BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
                 .setSupported(true)
                 .setServerClientId(it)
                 .setFilterByAuthorizedAccounts(false)
                 .build()
-        }?.let {
+        }.let {
             BeginSignInRequest.builder()
                 .setGoogleIdTokenRequestOptions(
                     it
@@ -157,20 +160,18 @@ class MainActivity : ComponentActivity() {
                 .build()
         }
 
-        if (signInRequest != null) {
-            oneTapClient.beginSignIn(signInRequest)
-                .addOnSuccessListener(this) { result ->
-                    try {
-                        signInLauncher.launch(IntentSenderRequest.Builder(result.pendingIntent.intentSender).build())
-                    } catch (e: IntentSender.SendIntentException) {
-                        Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage}")
-                    }
+        oneTapClient.beginSignIn(signInRequest)
+            .addOnSuccessListener(this) { result ->
+                try {
+                    signInLauncher.launch(IntentSenderRequest.Builder(result.pendingIntent.intentSender).build())
+                } catch (e: IntentSender.SendIntentException) {
+                    Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage}")
                 }
-                .addOnFailureListener(this) { e ->
-                    // No Google Accounts found. Just continue presenting the signed-out UI.
-                    e.localizedMessage?.let { Log.d(TAG, it) }
-                }
-        }
+            }
+            .addOnFailureListener(this) { e ->
+                // No Google Accounts found. Just continue presenting the signed-out UI.
+                e.localizedMessage?.let { Log.d(TAG, it) }
+            }
     }
 
     private fun checkUserInFirestore(userId: String?) {

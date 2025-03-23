@@ -1,9 +1,16 @@
+import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
 }
+
+val localProperties = gradleLocalProperties(
+    rootDir,
+    project.providers
+)
 
 android {
     namespace = "com.example.sustavzainstrukcije"
@@ -27,6 +34,12 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            buildConfigField("String", "SERVER_CLIENT_ID", "\"${localProperties["SERVER_CLIENT_ID"]}\"")
+        }
+        release {
+            buildConfigField("String", "SERVER_CLIENT_ID", "\"${localProperties["SERVER_CLIENT_ID"]}\"")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -37,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -73,4 +87,5 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    implementation(libs.dotenv.kotlin)
 }
