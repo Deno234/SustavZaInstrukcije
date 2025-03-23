@@ -1,4 +1,4 @@
-package com.example.sustavzainstrukcije
+package com.example.sustavzainstrukcije.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -284,7 +283,7 @@ private fun SubjectsInput(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DaySelector(
+private fun DaySelector(
     selectedDay: String,
     onDaySelected: (String) -> Unit
 ) {
