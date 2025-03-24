@@ -1,23 +1,21 @@
 package com.example.sustavzainstrukcije.ui.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
-import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
+import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
-import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
 @Composable
 fun NavGraph(
     navController: NavHostController = rememberNavController(),
     onGoogleSignIn: () -> Unit,
-    viewModel: AuthViewModel = viewModel()
+    onGoogleRegistrationComplete: () -> Unit
 ) {
     NavHost(navController = navController, startDestination = "main") {
         composable("main") {
@@ -39,9 +37,7 @@ fun NavGraph(
         }
         composable("googleRegistration") {
             GoogleRegistrationScreen(
-                onRegistrationComplete = {
-                    viewModel.checkUserInFirestore(viewModel.currentUserId)
-                }
+                onRegistrationComplete = onGoogleRegistrationComplete
             )
         }
         composable("home") {
