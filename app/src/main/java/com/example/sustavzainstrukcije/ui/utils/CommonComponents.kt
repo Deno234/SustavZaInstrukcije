@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -62,7 +63,7 @@ fun RoleSelector(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
         )
 
         ExposedDropdownMenu(
@@ -130,8 +131,8 @@ fun SubjectsInput(
                 label = { Text("Select Subject") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier
-                    .menuAnchor()
                     .fillMaxWidth()
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
             )
 
             ExposedDropdownMenu(
@@ -173,8 +174,8 @@ fun DaySelector(
             label = { Text("Select Day") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
-                .menuAnchor()
                 .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
         )
 
         ExposedDropdownMenu(
@@ -320,7 +321,7 @@ fun TimePicker(
         TimePickerDialog(
             onDismissRequest = { showDialog = false },
             onTimeSelected = { hour, minute ->
-                val time = String.format("%02d:%02d", hour, minute)
+                val time = String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
                 onTimeSelected(time)
                 showDialog = false
             }
