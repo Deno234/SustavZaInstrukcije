@@ -30,8 +30,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
-fun PrijavaScreen(
-    onPrijavaComplete: () -> Unit,
+fun LoginScreen(
+    onLoginComplete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -90,7 +90,7 @@ fun PrijavaScreen(
                 loginUser(
                     email = email,
                     password = password,
-                    onSuccess = onPrijavaComplete,
+                    onSuccess = onLoginComplete,
                     onError = { errorMessage = it }
                 )
             },
@@ -128,7 +128,7 @@ private fun loginUser(
                         onError("Failed to verify user data: ${e.message}")
                     }
             } else {
-                onError(authTask.exception?.message ?: "Logi failed")
+                onError(authTask.exception?.message ?: "Login failed")
             }
         }
 }

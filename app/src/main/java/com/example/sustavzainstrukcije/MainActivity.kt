@@ -1,200 +1,86 @@
 package com.example.sustavzainstrukcije
 
-import android.content.ContentValues.TAG
-import android.content.IntentSender
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
-import com.example.sustavzainstrukcije.ui.screens.PrijavaScreen
-import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
+import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
-import com.google.android.gms.auth.api.identity.BeginSignInRequest
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.auth.api.identity.SignInClient
-import com.google.android.gms.common.api.ApiException
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.firestore.FirebaseFirestore
-import com.example.sustavzainstrukcije.BuildConfig
+import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
+import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var auth: FirebaseAuth
-    private lateinit var oneTapClient: SignInClient
-    private lateinit var db: FirebaseFirestore
-    private var navigateToHome: () -> Unit = {}
-    private var navigateToGoogleRegistration: () -> Unit = {}
-
-    private val signInLauncher =
-        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult())
-        {
-            result -> 
-            if (result.resultCode == RESULT_OK) {
-                try {
-                    val credential = oneTapClient.getSignInCredentialFromIntent(result.data)
-                    val idToken = credential.googleIdToken
-                    when {
-                        idToken != null -> {
-                            // Got an ID token from Google. Use it to authenticate
-                            // with Firebase.
-                            val firebaseCredential =
-                                GoogleAuthProvider.getCredential(idToken, null)
-                            auth.signInWithCredential(firebaseCredential)
-                                .addOnCompleteListener(this) { task ->
-                                    if (task.isSuccessful) {
-                                        val user = auth.currentUser
-                                        checkUserInFirestore(user?.uid)
-                                    } else {
-                                        Log.w(TAG, "signInWithCredential:failure", task.exception)
-                                    }
-                                }
-                        }
-                        else -> {
-                            Log.d(TAG, "No ID token!")
-                        }
-                    }
-                } catch (e: ApiException) {
-                    Log.w(TAG, "Google sign in failed", e)
-                }
-            }
-        }
+    /**
+     * This creates a single instance of AuthViewModel tied to activity’s lifecycle.
+     * Survives screen rotations (keeps data safe)
+     * Separates business logic (sign-in, navigation) from UI code
+     */
+    private val viewModel: AuthViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        auth = FirebaseAuth.getInstance()
-        db = FirebaseFirestore.getInstance()
-        oneTapClient = Identity.getSignInClient(this)
-
         enableEdgeToEdge()
         setContent {
             SustavZaInstrukcijeTheme {
+                /**
+                 * Jetpack Compose requires the NavController to be created inside a composable function (like setContent).
+                 * rememberNavController() ensures it survives recompositions (UI updates)
+                 * By passing the navController from MainActivity, you ensure that all parts of your app share the same navigation controller.
+                 */
+                val navController = rememberNavController()
+
+
+                /**
+                 * Ensures the ViewModel can trigger navigation (e.g., after sign-in).
+                 * LaunchedEffect runs this code once when the composable starts (safe for setup tasks).
+                 * Avoids passing navController directly to the ViewModel (which could cause lifecycle issues)
+                 */
+                LaunchedEffect(navController) {
+                    viewModel.setNavController(navController)
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val navController = rememberNavController()
-
-                    navigateToHome = { navController.navigate("home") }
-                    navigateToGoogleRegistration = { navController.navigate(("googleRegistration")) }
-
-                    NavHost(navController = navController, startDestination = "login") {
-                        composable("login") {
-                            LoginScreen(
-                                onLoginClick = {navController.navigate("prijava")},
-                                onRegisterClick = {
-                                    navController.navigate("register")
-                                },
-                                onGoogleSignInClick = { signInWithGoogle() }
-                            )
-                        }
-                        composable("register") {
-                            RegisterScreen(
-                                onRegistrationComplete = {
-                                    navController.popBackStack()
+                    NavGraph(
+                        navController = navController,
+                        onGoogleSignIn = {
+                            viewModel.initiateGoogleSignIn { request ->
+                                lifecycleScope.launch {
+                                    try {
+                                        val credential = viewModel.credentialManager.getCredential(
+                                            context = this@MainActivity,
+                                            request = request)
+                                        viewModel.handleSignInResult(credential)
+                                    } catch (e: GetCredentialException) {
+                                        viewModel.handleSignInError(e)
+                                    }
                                 }
-                            )
+                            }
+                        },
+                        onGoogleRegistrationComplete = {
+                            viewModel.checkUserInFirestore(viewModel.currentUserId)
                         }
-                        composable("googleRegistration") {
-                            GoogleRegistrationScreen(
-                                onRegistrationComplete = {
-                                    navController.navigate("home")
-                                }
-                            )
-                        }
-
-                        composable("home") {
-                            HomeScreen()
-                        }
-
-                        composable("prijava") {
-                            PrijavaScreen(
-                                onPrijavaComplete = {
-                                    navController.navigate("home")
-                                }
-                            )
-                        }
-                    }
+                    )
                 }
             }
         }
     }
-
-    private fun signInWithGoogle() {
-        val serverClientId = BuildConfig.SERVER_CLIENT_ID
-
-        val signInRequest = serverClientId.let {
-            BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                .setSupported(true)
-                .setServerClientId(it)
-                .setFilterByAuthorizedAccounts(false)
-                .build()
-        }.let {
-            BeginSignInRequest.builder()
-                .setGoogleIdTokenRequestOptions(
-                    it
-                )
-                .build()
-        }
-
-        oneTapClient.beginSignIn(signInRequest)
-            .addOnSuccessListener(this) { result ->
-                try {
-                    signInLauncher.launch(IntentSenderRequest.Builder(result.pendingIntent.intentSender).build())
-                } catch (e: IntentSender.SendIntentException) {
-                    Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage}")
-                }
-            }
-            .addOnFailureListener(this) { e ->
-                // No Google Accounts found. Just continue presenting the signed-out UI.
-                e.localizedMessage?.let { Log.d(TAG, it) }
-            }
-    }
-
-    private fun checkUserInFirestore(userId: String?) {
-        if (userId == null) {
-            Log.w(TAG, "User ID is null")
-            return
-        }
-
-        db.collection("users").document(userId).get()
-            .addOnSuccessListener { document ->
-                if (document.exists()) {
-                    // User exists in Firestore, navigate to main screen
-                    navigateToHome()
-                } else {
-                    // User doesn't exist in Firestore, navigate to Google registration screen
-                    navigateToGoogleRegistration()
-                }
-            }
-            .addOnFailureListener { exception ->
-                Log.w(TAG, "Error checking user document", exception)
-            }
-    }
-
 }
 
 
@@ -206,67 +92,11 @@ fun LoginScreenPreview() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            LoginScreen(
+            MainScreen(
                 onLoginClick = {},
                 onRegisterClick = {},
                 onGoogleSignInClick = {}
             )
         }
-    }
-}
-
-@Composable
-fun LoginScreen(
-    onLoginClick: () -> Unit,
-    onRegisterClick: () -> Unit,
-    onGoogleSignInClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Welcome to Instruction App",
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-        Button(
-            onClick = onLoginClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 8.dp)
-        ) {
-            Text("LOG IN")
-        }
-        Button(
-            onClick = onRegisterClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 8.dp)
-        ) {
-            Text("REGISTER")
-        }
-        Button(
-            onClick = onGoogleSignInClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 8.dp)
-        ) {
-            Text("Google Sign In")
-        }
-
-    }
-}
-
-@Composable
-fun HomeScreen() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("Welcome to the Home Screen!")
     }
 }
