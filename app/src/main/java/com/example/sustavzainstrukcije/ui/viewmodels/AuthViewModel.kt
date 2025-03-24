@@ -1,17 +1,20 @@
 package com.example.sustavzainstrukcije.ui.viewmodels
 
-import android.app.Activity.RESULT_OK
 import android.app.Application
 import android.util.Log
-import androidx.activity.result.ActivityResult
-import androidx.activity.result.IntentSenderRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.example.sustavzainstrukcije.BuildConfig
-import com.google.android.gms.auth.api.identity.BeginSignInRequest
-import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
@@ -23,7 +26,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
-    private val oneTapClient = Identity.getSignInClient(application)
+    val credentialManager = CredentialManager.create(application)
 
     private val _errorMessage = MutableSharedFlow<String>()
     private val _loadingState = MutableStateFlow(false)
@@ -35,66 +38,56 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         navController = controller
     }
 
-    fun initiateGoogleSignIn(launcher: (IntentSenderRequest) -> Unit) {
+    fun initiateGoogleSignIn(launcher: (GetCredentialRequest) -> Unit) {
         _loadingState.value = true
         val serverClientId = BuildConfig.SERVER_CLIENT_ID
 
-        val signInRequest = BeginSignInRequest.Builder()
-            .setGoogleIdTokenRequestOptions(
-                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                    .setSupported(true)
-                    .setServerClientId(serverClientId)
-                    .setFilterByAuthorizedAccounts(false)
-                    .build()
-            )
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setServerClientId(serverClientId)
+            .setFilterByAuthorizedAccounts(false)
             .build()
 
-        oneTapClient.beginSignIn(signInRequest)
-            .addOnSuccessListener { result ->
-                launcher(IntentSenderRequest.Builder(result.pendingIntent.intentSender).build())
-                _loadingState.value = false
-            }
-            .addOnFailureListener { e ->
-                _loadingState.value = false
-                Log.e(TAG, "Sign-in initialization failed", e)
-                viewModelScope.launch {
-                    _errorMessage.emit(when (e) {
-                        is ApiException -> "Error code ${e.statusCode}: ${e.message}"
-                        else -> "Sign-in initialization failed"
-                    })
-                }
-            }
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+
+        launcher(request)
     }
 
-    fun handleSignInResult(result: ActivityResult) {
-        if (result.resultCode == RESULT_OK) {
-            _loadingState.value = true
-            try {
-                val credential = oneTapClient.getSignInCredentialFromIntent(result.data)
-                val idToken = credential.googleIdToken
+    fun handleSignInResult(result: GetCredentialResponse) {
+        _loadingState.value = true
+        try {
+            val credential = result.credential
+            if (credential is CustomCredential && credential.type ==
+                GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                val idToken = googleIdTokenCredential.idToken
 
-                idToken?.let { token ->
-                    val firebaseCredential = GoogleAuthProvider.getCredential(token, null)
-                    auth.signInWithCredential(firebaseCredential)
-                        .addOnCompleteListener { task ->
-                            _loadingState.value = false
-                            if (task.isSuccessful) {
-                                checkUserInFirestore(auth.currentUser?.uid)
-                            } else {
-                                handleAuthError(task.exception)
-                            }
+                val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+                auth.signInWithCredential(firebaseCredential)
+                    .addOnCompleteListener { task ->
+                        _loadingState.value = false
+                        if (task.isSuccessful) {
+                            checkUserInFirestore(auth.currentUser?.uid)
+                        } else {
+                            handleAuthError(task.exception)
                         }
-                } ?: run {
-                    _loadingState.value = false
-                    viewModelScope.launch {
-                        _errorMessage.emit("No ID token found")
                     }
-                }
-            } catch (e: ApiException) {
+            } else {
                 _loadingState.value = false
-                handleAuthError(e)
+                viewModelScope.launch {
+                    _errorMessage.emit("Invalid credential type")
+                }
             }
+        } catch (e: GoogleIdTokenParsingException) {
+            _loadingState.value = false
+            handleAuthError(e)
         }
+    }
+
+    fun handleSignInError(e: GetCredentialException) {
+        _loadingState.value = false
+        handleAuthError(e)
     }
 
     fun checkUserInFirestore(userId: String?) {

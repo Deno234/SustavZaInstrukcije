@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -13,11 +12,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -27,15 +29,6 @@ class MainActivity : ComponentActivity() {
      * Separates business logic (sign-in, navigation) from UI code
      */
     private val viewModel: AuthViewModel by viewModels()
-
-    private val signInLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
-        /**
-         * ViewModels manage complex logic (e.g., validating sign-in tokens, navigating post-login).
-         * Keeps activity code clean and focused on UI.
-         * Follows MVVM pattern: UI displays data, ViewModel processes it
-         */
-        viewModel.handleSignInResult(it)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,8 +60,17 @@ class MainActivity : ComponentActivity() {
                     NavGraph(
                         navController = navController,
                         onGoogleSignIn = {
-                            viewModel.initiateGoogleSignIn { intentRequest ->
-                                signInLauncher.launch(intentRequest)
+                            viewModel.initiateGoogleSignIn { request ->
+                                lifecycleScope.launch {
+                                    try {
+                                        val credential = viewModel.credentialManager.getCredential(
+                                            context = this@MainActivity,
+                                            request = request)
+                                        viewModel.handleSignInResult(credential)
+                                    } catch (e: GetCredentialException) {
+                                        viewModel.handleSignInError(e)
+                                    }
+                                }
                             }
                         },
                         onGoogleRegistrationComplete = {
