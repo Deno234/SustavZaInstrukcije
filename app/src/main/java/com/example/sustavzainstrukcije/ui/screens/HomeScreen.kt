@@ -1,8 +1,11 @@
 package com.example.sustavzainstrukcije.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -13,35 +16,55 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sustavzainstrukcije.ui.utils.InstructorsHorizontalRow
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
+import com.example.sustavzainstrukcije.ui.viewmodels.InstructorsViewModel
 
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    viewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    instructorsViewModel: InstructorsViewModel = viewModel()
 ) {
 
+    val userData by authViewModel.userData.collectAsState()
+    val instructors by instructorsViewModel.instructors.collectAsState()
+    val isInstructorsLoading by instructorsViewModel.loadingState.collectAsState()
+
     LaunchedEffect(Unit) {
-        viewModel.fetchCurrentUserData()
+        authViewModel.fetchCurrentUserData()
     }
-    val userData by viewModel.userData.collectAsState()
 
-    Column(modifier.fillMaxSize().padding(16.dp)) {
-        if (userData == null) {
-            CircularProgressIndicator()
-        } else {
-            Text("Welcome ${userData?.name}", style = MaterialTheme.typography.headlineMedium)
-            Text("Role: ${userData?.role}")
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Welcome ${userData?.name}!",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Text(
+                    "Role: ${userData?.role}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
-            if (userData?.role == "instructor") {
-                Text("Subjects:", style = MaterialTheme.typography.titleMedium)
-                userData?.subjects?.forEach { subject ->
-                    Text("- $subject")
-                }
-
-                Text("Availability:", style = MaterialTheme.typography.titleMedium)
-                userData?.availableHours?.forEach { (day, hours) ->
-                    Text("$day: ${hours.joinToString()}")
+        if (userData?.role == "student") {
+            item {
+                when {
+                    isInstructorsLoading -> CircularProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    instructors.isEmpty() -> Text(
+                        "No instructors available",
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    else -> InstructorsHorizontalRow(
+                        title = "All instructors",
+                        instructors = instructors
+                    )
                 }
             }
         }
