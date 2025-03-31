@@ -422,15 +422,13 @@ fun InstructorsHorizontalRow(
     instructors: List<User>,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().padding(bottom = 16.dp)) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+            style = MaterialTheme.typography.titleLarge
         )
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             /**
              * items - works within LazyRow/LazyColumn
@@ -450,7 +448,8 @@ fun InstructorHorizontalCard(instructor: User) {
     Card(
         modifier = Modifier
             .width(280.dp)
-            .padding(8.dp),
+            .padding(top = 8.dp)
+            .padding(end = 8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
@@ -465,8 +464,7 @@ fun InstructorHorizontalCard(instructor: User) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Teaches: ${instructor.subjects.take(3).joinToString(", ")}" +
-                if (instructor.subjects.size > 3) "..." else "",
+                text = "Teaches: ${instructor.subjects.sorted().joinToString(", ")}",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(8.dp))

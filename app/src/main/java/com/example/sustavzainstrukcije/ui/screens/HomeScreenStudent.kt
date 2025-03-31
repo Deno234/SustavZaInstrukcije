@@ -75,7 +75,7 @@ fun HomeScreenStudent(instructorsViewModel: InstructorsViewModel = viewModel()) 
             CircularProgressIndicator(modifier = Modifier.fillMaxWidth())
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 filteredGroupedInstructors.forEach { (subject, instructorList) ->
