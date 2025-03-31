@@ -2,6 +2,7 @@ package com.example.sustavzainstrukcije.ui.utils
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,12 +18,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -32,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -471,6 +475,45 @@ fun InstructorHorizontalCard(instructor: User) {
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
                 Text("See Availability")
+            }
+        }
+    }
+}
+
+@Composable
+fun SubjectDropdown(
+    selectedSubject: String?,
+    onSubjectSelected: (String?) -> Unit,
+    availableSubjects: List<String>
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(selectedSubject ?: "Select Subject")
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown Arrow")
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("All Subjects") },
+                onClick = {
+                    onSubjectSelected(null)
+                    expanded = false
+                }
+            )
+
+            availableSubjects.forEach { subject ->
+                DropdownMenuItem(
+                    text = { Text(subject) },
+                    onClick = {
+                        onSubjectSelected(subject)
+                        expanded = false
+                    }
+                )
             }
         }
     }
