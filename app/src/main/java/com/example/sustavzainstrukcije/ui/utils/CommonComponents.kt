@@ -223,6 +223,7 @@ fun AvailableHoursInput(
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
     val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
     val sortedAvailableHours = orderedDays.associateWith { day ->
         availableHours[day] ?: emptyList()
     }
@@ -238,21 +239,17 @@ fun AvailableHoursInput(
                 Text("Add Hours")
             }
 
-            Button(
-                onClick = { showViewDialog = true }
-            ) {
-                   Text("Show Selected Hours")
+            Button(onClick = { showViewDialog = true }) {
+                Text("Show Selected Hours")
             }
 
             if (showViewDialog) {
                 AlertDialog(
-                    onDismissRequest = { showViewDialog = false},
+                    onDismissRequest = { showViewDialog = false },
                     title = { Text("Selected Hours") },
                     text = {
-                        LazyColumn (
-                            modifier = Modifier.heightIn(max = 400.dp)
-                        ) {
-                            availableHours.forEach { (day, slots) ->
+                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                            sortedAvailableHours.forEach { (day, slots) ->
                                 if (slots.isNotEmpty()) {
                                     item {
                                         Text(
@@ -275,9 +272,10 @@ fun AvailableHoursInput(
                                             IconButton(
                                                 onClick = {
                                                     val updated = availableHours.toMutableMap()
-                                                    val current = updated[day]?.toMutableList() ?: mutableListOf()
-                                                    current.remove(slot)
-                                                    updated[day] = current
+                                                    val currentSlots =
+                                                        updated[day]?.toMutableList() ?: mutableListOf()
+                                                    currentSlots.remove(slot)
+                                                    updated[day] = currentSlots
                                                     onHoursUpdated(updated)
                                                 }
                                             ) {
@@ -328,11 +326,15 @@ fun AvailableHoursInput(
                 Button(onClick = {
                     if (selectedDay.isNotBlank() && startTime.isNotBlank() && endTime.isNotBlank()) {
                         val timeSlot = "$startTime - $endTime"
-                        val updated = availableHours.toMutableMap()
-                        val currentSlots = updated[selectedDay] ?: emptyList()
-                        val newSlots = (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
-                        updated[selectedDay] = newSlots
-                        onHoursUpdated(updated)
+                        val updatedAvailableHours =
+                            sortedAvailableHours.toMutableMap() // Use sorted map for updates
+                        val currentSlots =
+                            updatedAvailableHours[selectedDay] ?: emptyList()
+                        val newSlots =
+                            (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] } // Sort time slots
+                        updatedAvailableHours[selectedDay] =
+                            newSlots // Update slots for the selected day
+                        onHoursUpdated(updatedAvailableHours)
                         showDialog = false
                     }
                 }) {
@@ -347,6 +349,7 @@ fun AvailableHoursInput(
         )
     }
 }
+
 
 @Composable
 fun TimePicker(
