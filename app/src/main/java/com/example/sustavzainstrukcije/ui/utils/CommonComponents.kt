@@ -1,5 +1,6 @@
 package com.example.sustavzainstrukcije.ui.utils
 
+import android.app.AlertDialog
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -209,57 +212,92 @@ fun DaySelector(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
     onHoursUpdated: (Map<String, List<String>>) -> Unit,
 ) {
     var showDialog by remember { mutableStateOf(false) }
+    var showViewDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf("") }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
     val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    val sortedAvailableHours = orderedDays.associateWith { day ->
+        availableHours[day] ?: emptyList()
+    }
 
     Column {
         Text("Available Hours:", style = MaterialTheme.typography.labelMedium)
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Button(onClick = { showDialog = true }) {
-                    Text("Add Hours")
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(onClick = { showDialog = true }) {
+                Text("Add Hours")
             }
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp)
+            Button(
+                onClick = { showViewDialog = true }
             ) {
-                items(orderedDays) { day ->
-                    Text("$day:", modifier = Modifier.padding(4.dp))
+                   Text("Show Selected Hours")
+            }
 
-                    availableHours[day]?.forEach { timeSlot ->
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            InputChip(
-                                selected = false,
-                                onClick = {},
-                                label = { Text(timeSlot) },
-                                trailingIcon = {
-                                    IconButton(onClick = {
-                                        val updated = availableHours.toMutableMap()
-                                        val currentSlots = updated[day]?.toMutableList() ?: mutableListOf()
-                                        currentSlots.remove(timeSlot)
-                                        updated[day] = currentSlots
-                                        onHoursUpdated(updated)
-                                    }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remove")
+            if (showViewDialog) {
+                AlertDialog(
+                    onDismissRequest = { showViewDialog = false},
+                    title = { Text("Selected Hours") },
+                    text = {
+                        LazyColumn (
+                            modifier = Modifier.heightIn(max = 400.dp)
+                        ) {
+                            availableHours.forEach { (day, slots) ->
+                                if (slots.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            text = day,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
+                                    items(slots) { slot ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = slot,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(vertical = 4.dp)
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    val updated = availableHours.toMutableMap()
+                                                    val current = updated[day]?.toMutableList() ?: mutableListOf()
+                                                    current.remove(slot)
+                                                    updated[day] = current
+                                                    onHoursUpdated(updated)
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Remove"
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                            )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showViewDialog = false }) {
+                            Text("Close")
                         }
                     }
-                }
+                )
             }
         }
     }
