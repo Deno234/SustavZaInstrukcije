@@ -39,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -53,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import com.example.sustavzainstrukcije.ui.data.User
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -340,36 +343,29 @@ fun TimePicker(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimePickerDialog(
     onDismissRequest: () -> Unit,
     onTimeSelected: (Int, Int) -> Unit
 ) {
     val calendar = Calendar.getInstance()
-    var selectedHour by remember { mutableIntStateOf(calendar.get(Calendar.HOUR_OF_DAY)) }
-    var selectedMinute by remember { mutableIntStateOf(calendar.get(Calendar.MINUTE)) }
+    val state = rememberTimePickerState(
+        initialHour = calendar.get(Calendar.HOUR_OF_DAY),
+        initialMinute = calendar.get(Calendar.MINUTE),
+        is24Hour = true
+    )
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("Select Time") },
         text = {
-            Column {
-                NumberPicker(
-                    value = selectedHour,
-                    onValueChange = { selectedHour = it },
-                    range = 0..23,
-                    label = "Hour"
-                )
-                NumberPicker(
-                    value = selectedMinute,
-                    onValueChange = { selectedMinute = it },
-                    range = 0..59,
-                    label = "Minute"
-                )
-            }
+            TimePicker(state = state)
         },
         confirmButton = {
-            TextButton(onClick = { onTimeSelected(selectedHour, selectedMinute) }) {
+            TextButton(onClick = {
+                onTimeSelected(state.hour, state.minute)
+            }) {
                 Text("OK")
             }
         },
@@ -379,40 +375,6 @@ private fun TimePickerDialog(
             }
         }
     )
-}
-
-@Composable
-private fun NumberPicker(
-    value: Int,
-    onValueChange: (Int) -> Unit,
-    range: IntRange,
-    label: String
-) {
-    var sliderPosition by remember { mutableFloatStateOf(value.toFloat()) }
-
-    Column {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Slider(
-                value = sliderPosition,
-                onValueChange = {
-                    sliderPosition = it
-                    onValueChange(it.toInt())
-                },
-                valueRange = range.first.toFloat()..range.last.toFloat(),
-                steps = range.last - range.first,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = sliderPosition.toInt().toString().padStart(2, '0'),
-                modifier = Modifier.padding(start = 16.dp),
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
 }
 
 @Composable
