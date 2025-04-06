@@ -349,10 +349,9 @@ private fun TimePickerDialog(
     onDismissRequest: () -> Unit,
     onTimeSelected: (Int, Int) -> Unit
 ) {
-    val calendar = Calendar.getInstance()
     val state = rememberTimePickerState(
-        initialHour = calendar.get(Calendar.HOUR_OF_DAY),
-        initialMinute = calendar.get(Calendar.MINUTE),
+        initialHour = 0,
+        initialMinute = 0,
         is24Hour = true
     )
 
