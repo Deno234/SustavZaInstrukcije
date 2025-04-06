@@ -20,6 +20,8 @@ play-services-auth = "21.3.0"
 google-id = "1.1.1"
 media3CommonKtx = "1.5.1"
 dotenv-kotlin = "6.5.1"
+material = "1.12.0"
+composeMaterialNew = "1.4.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,6 +55,8 @@ firebase-database = { module = "com.google.firebase:firebase-database"}
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-ktx", version.ref = "media3CommonKtx" }
 dotenv-kotlin = { group = "io.github.cdimascio", name = "dotenv-kotlin", version.ref = "dotenv-kotlin"}
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-compose-material = { group = "androidx.wear.compose", name = "compose-material", version.ref = "composeMaterialNew" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

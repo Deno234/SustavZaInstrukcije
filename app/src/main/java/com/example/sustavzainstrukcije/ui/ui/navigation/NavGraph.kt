@@ -9,6 +9,7 @@ import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
+import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
 
 @Composable
@@ -41,7 +42,23 @@ fun NavGraph(
             )
         }
         composable("home") {
-            HomeScreen()
+            HomeScreen(navController)
         }
+
+        composable("profile") {
+            ProfileScreen()
+        }
+
+        /*composable("appointments") {
+            AppointmentsScreen()
+        }
+
+        composable("messages") {
+            MessagesScreen()
+        }
+
+        composable("otherInstructors") {
+            OtherInstructorsScreen()
+        }*/
     }
 }

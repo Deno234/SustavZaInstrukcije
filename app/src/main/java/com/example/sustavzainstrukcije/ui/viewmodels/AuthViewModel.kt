@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.example.sustavzainstrukcije.BuildConfig
+import com.example.sustavzainstrukcije.ui.data.User
 import com.google.android.gms.common.api.ApiException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -20,16 +21,21 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
-    val credentialManager = CredentialManager.create(application)
 
     private val _errorMessage = MutableSharedFlow<String>()
     private val _loadingState = MutableStateFlow(false)
+    private val _userData = MutableStateFlow<User?>(null)
+
+    val credentialManager = CredentialManager.create(application)
+    val userData: StateFlow<User?> = _userData.asStateFlow()
 
     var currentUserId: String? = null
     private lateinit var navController: NavController
@@ -102,7 +108,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         db.collection("users").document(userId).get()
             .addOnSuccessListener { document ->
                 viewModelScope.launch {
-                    navigateTo(if (document.exists()) "home" else "googleRegistration")
+                    if (document.exists()) {
+                        _userData.value = document.toObject(User::class.java)?.copy(id = userId)
+                        navigateTo("home")
+                    } else {
+                        navigateTo("googleRegistration")
+                    }
                 }
             }
             .addOnFailureListener { exception ->
@@ -129,6 +140,35 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 popUpTo("login") { inclusive = true }
             }
         }
+    }
+
+    fun fetchCurrentUserData() {
+        val currentUser = auth.currentUser
+        currentUserId = currentUser?.uid
+
+        auth.currentUser?.uid?.let { userId ->
+            db.collection("users").document(userId).get()
+                .addOnSuccessListener { document ->
+                    _userData.value =
+                        document.toObject(User::class.java)?.copy(id = userId)
+                }
+        }
+    }
+
+    fun updateInstructorProfile(name: String, subjects: List<String>, availableHours: Map<String, List<String>>) {
+        val currentUserId = currentUserId ?: return
+        val updates = mapOf(
+            "name" to name,
+            "subjects" to subjects,
+            "availableHours" to availableHours
+        )
+        db.collection("users").document(currentUserId).update(updates)
+            .addOnSuccessListener {
+                fetchCurrentUserData()
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error updating instructor profile", e)
+            }
     }
 
     companion object {

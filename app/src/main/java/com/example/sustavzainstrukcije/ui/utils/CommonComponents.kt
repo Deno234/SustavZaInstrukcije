@@ -2,21 +2,30 @@ package com.example.sustavzainstrukcije.ui.utils
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -26,22 +35,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.util.Calendar
+import com.example.sustavzainstrukcije.ui.data.User
 import java.util.Locale
+import androidx.compose.material3.TimePicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,6 +164,38 @@ fun SubjectsInput(
     }
 }
 
+@Composable
+fun SubjectSelector(
+    subjects: List<String>,
+    selectedSubjects: List<String>,
+    onSubjectSelected: (String) -> Unit,
+    onSubjectDeselected: (String) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(subjects) { subject ->
+            val isSelected = selectedSubjects.contains(subject)
+            AssistChip(
+                onClick = {
+                    if (isSelected) {
+                        onSubjectDeselected(subject)
+                    } else {
+                        onSubjectSelected(subject)
+                    }
+                },
+                label = { Text(subject) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor =
+                        if (isSelected) MaterialTheme.colorScheme.primary else
+                            MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DaySelector(
@@ -195,64 +237,97 @@ fun DaySelector(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
     onHoursUpdated: (Map<String, List<String>>) -> Unit,
 ) {
-    var showDialog by remember { mutableStateOf(false) }
+    var showAddHoursDialog by remember { mutableStateOf(false) }
+    var showViewHoursDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf("") }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
     val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
+    val sortedAvailableHours = orderedDays.associateWith { day ->
+        availableHours[day] ?: emptyList()
+    }
+
     Column {
         Text("Available Hours:", style = MaterialTheme.typography.labelMedium)
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Button(onClick = { showDialog = true }) {
-                    Text("Add Hours")
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(onClick = { showAddHoursDialog = true }) {
+                Text("Add Hours")
             }
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp)
-            ) {
-                items(orderedDays) { day ->
-                    Text("$day:", modifier = Modifier.padding(4.dp))
+            Button(onClick = { showViewHoursDialog = true }) {
+                Text("Show Selected Hours")
+            }
 
-                    availableHours[day]?.forEach { timeSlot ->
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            InputChip(
-                                selected = false,
-                                onClick = {},
-                                label = { Text(timeSlot) },
-                                trailingIcon = {
-                                    IconButton(onClick = {
-                                        val updated = availableHours.toMutableMap()
-                                        val currentSlots = updated[day]?.toMutableList() ?: mutableListOf()
-                                        currentSlots.remove(timeSlot)
-                                        updated[day] = currentSlots
-                                        onHoursUpdated(updated)
-                                    }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remove")
+            if (showViewHoursDialog) {
+                AlertDialog(
+                    onDismissRequest = { showViewHoursDialog = false },
+                    title = { Text("Selected Hours") },
+                    text = {
+                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                            sortedAvailableHours.forEach { (day, slots) ->
+                                if (slots.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            text = day,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
+                                    items(slots) { slot ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = slot,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(vertical = 4.dp)
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    val updated = availableHours.toMutableMap()
+                                                    val currentSlots =
+                                                        updated[day]?.toMutableList() ?: mutableListOf()
+                                                    currentSlots.remove(slot)
+                                                    updated[day] = currentSlots
+                                                    onHoursUpdated(updated)
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Remove"
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                            )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showViewHoursDialog = false }) {
+                            Text("Close")
                         }
                     }
-                }
+                )
             }
         }
     }
 
-    if (showDialog) {
+    if (showAddHoursDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { showAddHoursDialog = false },
             title = { Text("Add Available Hours") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -276,25 +351,35 @@ fun AvailableHoursInput(
                 Button(onClick = {
                     if (selectedDay.isNotBlank() && startTime.isNotBlank() && endTime.isNotBlank()) {
                         val timeSlot = "$startTime - $endTime"
-                        val updated = availableHours.toMutableMap()
-                        val currentSlots = updated[selectedDay] ?: emptyList()
-                        val newSlots = (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
-                        updated[selectedDay] = newSlots
-                        onHoursUpdated(updated)
-                        showDialog = false
+                        val updatedAvailableHours =
+                            availableHours.toMutableMap()
+                        val currentSlots =
+                            updatedAvailableHours[selectedDay] ?: emptyList()
+                        val newSlots =
+                            (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
+                        updatedAvailableHours[selectedDay] =
+                            newSlots
+                        onHoursUpdated(updatedAvailableHours)
+                        showAddHoursDialog = false
                     }
                 }) {
                     Text("Add")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDialog = false }) {
+                TextButton(onClick = {
+                    showAddHoursDialog = false
+                    selectedDay = ""
+                    startTime = ""
+                    endTime = ""
+                }) {
                     Text("Cancel")
                 }
             }
         )
     }
 }
+
 
 @Composable
 fun TimePicker(
@@ -329,36 +414,28 @@ fun TimePicker(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimePickerDialog(
     onDismissRequest: () -> Unit,
     onTimeSelected: (Int, Int) -> Unit
 ) {
-    val calendar = Calendar.getInstance()
-    var selectedHour by remember { mutableIntStateOf(calendar.get(Calendar.HOUR_OF_DAY)) }
-    var selectedMinute by remember { mutableIntStateOf(calendar.get(Calendar.MINUTE)) }
+    val state = rememberTimePickerState(
+        initialHour = 0,
+        initialMinute = 0,
+        is24Hour = true
+    )
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("Select Time") },
         text = {
-            Column {
-                NumberPicker(
-                    value = selectedHour,
-                    onValueChange = { selectedHour = it },
-                    range = 0..23,
-                    label = "Hour"
-                )
-                NumberPicker(
-                    value = selectedMinute,
-                    onValueChange = { selectedMinute = it },
-                    range = 0..59,
-                    label = "Minute"
-                )
-            }
+            TimePicker(state = state)
         },
         confirmButton = {
-            TextButton(onClick = { onTimeSelected(selectedHour, selectedMinute) }) {
+            TextButton(onClick = {
+                onTimeSelected(state.hour, state.minute)
+            }) {
                 Text("OK")
             }
         },
@@ -371,35 +448,104 @@ private fun TimePickerDialog(
 }
 
 @Composable
-private fun NumberPicker(
-    value: Int,
-    onValueChange: (Int) -> Unit,
-    range: IntRange,
-    label: String
+fun InstructorsHorizontalRow(
+    title: String,
+    instructors: List<User>,
+    modifier: Modifier = Modifier
 ) {
-    var sliderPosition by remember { mutableFloatStateOf(value.toFloat()) }
-
-    Column {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+    Column(modifier = modifier
+        .fillMaxWidth()
+        .padding(bottom = 16.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Slider(
-                value = sliderPosition,
-                onValueChange = {
-                    sliderPosition = it
-                    onValueChange(it.toInt())
-                },
-                valueRange = range.first.toFloat()..range.last.toFloat(),
-                steps = range.last - range.first,
-                modifier = Modifier.weight(1f)
-            )
+            /**
+             * items - works within LazyRow/LazyColumn
+             * More efficient for large lists
+             * Lazy - only renders visible items
+             * Efficient -> only updates changed items
+             */
+            items(instructors) { instructor ->
+                InstructorHorizontalCard(instructor = instructor)
+            }
+        }
+    }
+}
+
+@Composable
+fun InstructorHorizontalCard(instructor: User) {
+    Card(
+        modifier = Modifier
+            .width(280.dp)
+            .padding(top = 8.dp)
+            .padding(end = 8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth()
+        ) {
             Text(
-                text = sliderPosition.toInt().toString().padStart(2, '0'),
-                modifier = Modifier.padding(start = 16.dp),
-                style = MaterialTheme.typography.bodyLarge
+                text = instructor.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Teaches: ${instructor.subjects.sorted().joinToString(", ")}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {},
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text("See Availability")
+            }
+        }
+    }
+}
+
+@Composable
+fun SubjectDropdown(
+    selectedSubject: String?,
+    onSubjectSelected: (String?) -> Unit,
+    availableSubjects: List<String>
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(selectedSubject ?: "Select Subject")
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown Arrow")
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("All Subjects") },
+                onClick = {
+                    onSubjectSelected(null)
+                    expanded = false
+                }
+            )
+
+            availableSubjects.forEach { subject ->
+                DropdownMenuItem(
+                    text = { Text(subject) },
+                    onClick = {
+                        onSubjectSelected(subject)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }
