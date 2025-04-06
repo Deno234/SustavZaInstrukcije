@@ -1,12 +1,9 @@
 package com.example.sustavzainstrukcije.ui.utils
 
-import android.app.AlertDialog
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +21,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -39,14 +35,11 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,10 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.sustavzainstrukcije.ui.data.User
-import java.util.Calendar
 import java.util.Locale
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TimePickerState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -217,8 +208,8 @@ fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
     onHoursUpdated: (Map<String, List<String>>) -> Unit,
 ) {
-    var showDialog by remember { mutableStateOf(false) }
-    var showViewDialog by remember { mutableStateOf(false) }
+    var showAddHoursDialog by remember { mutableStateOf(false) }
+    var showViewHoursDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf("") }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
@@ -235,17 +226,17 @@ fun AvailableHoursInput(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(onClick = { showDialog = true }) {
+            Button(onClick = { showAddHoursDialog = true }) {
                 Text("Add Hours")
             }
 
-            Button(onClick = { showViewDialog = true }) {
+            Button(onClick = { showViewHoursDialog = true }) {
                 Text("Show Selected Hours")
             }
 
-            if (showViewDialog) {
+            if (showViewHoursDialog) {
                 AlertDialog(
-                    onDismissRequest = { showViewDialog = false },
+                    onDismissRequest = { showViewHoursDialog = false },
                     title = { Text("Selected Hours") },
                     text = {
                         LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
@@ -291,7 +282,7 @@ fun AvailableHoursInput(
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = { showViewDialog = false }) {
+                        TextButton(onClick = { showViewHoursDialog = false }) {
                             Text("Close")
                         }
                     }
@@ -300,9 +291,9 @@ fun AvailableHoursInput(
         }
     }
 
-    if (showDialog) {
+    if (showAddHoursDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { showAddHoursDialog = false },
             title = { Text("Add Available Hours") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -327,22 +318,27 @@ fun AvailableHoursInput(
                     if (selectedDay.isNotBlank() && startTime.isNotBlank() && endTime.isNotBlank()) {
                         val timeSlot = "$startTime - $endTime"
                         val updatedAvailableHours =
-                            sortedAvailableHours.toMutableMap() // Use sorted map for updates
+                            availableHours.toMutableMap()
                         val currentSlots =
                             updatedAvailableHours[selectedDay] ?: emptyList()
                         val newSlots =
-                            (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] } // Sort time slots
+                            (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
                         updatedAvailableHours[selectedDay] =
-                            newSlots // Update slots for the selected day
+                            newSlots
                         onHoursUpdated(updatedAvailableHours)
-                        showDialog = false
+                        showAddHoursDialog = false
                     }
                 }) {
                     Text("Add")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDialog = false }) {
+                TextButton(onClick = {
+                    showAddHoursDialog = false
+                    selectedDay = ""
+                    startTime = ""
+                    endTime = ""
+                }) {
                     Text("Cancel")
                 }
             }
