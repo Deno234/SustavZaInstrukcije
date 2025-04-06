@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sustavzainstrukcije.ui.utils.AvailableHoursInput
 import com.example.sustavzainstrukcije.ui.utils.Constants.INSTRUCTOR_SUBJECTS
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
@@ -37,7 +38,7 @@ fun ProfileScreenInstructor(
     val currentUser by authViewModel.userData.collectAsState()
     var name by remember { mutableStateOf(currentUser?.name ?: "") }
     var subjects by remember { mutableStateOf(currentUser?.subjects ?: listOf()) }
-    Log.d("ProfileScreenInstructor", "Subjects: $subjects")
+    var availableHours by remember { mutableStateOf(currentUser?.availableHours ?: emptyMap()) }
 
     LaunchedEffect(Unit) {
         authViewModel.fetchCurrentUserData()
@@ -93,11 +94,18 @@ fun ProfileScreenInstructor(
             }
         }
 
+        AvailableHoursInput(
+            availableHours = availableHours,
+            onHoursUpdated = { updatedHours ->
+                availableHours = updatedHours
+            }
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
-                authViewModel.updateInstructorProfile(name, subjects)
+                authViewModel.updateInstructorProfile(name, subjects, availableHours)
             },
             modifier = Modifier.fillMaxWidth()
         ) {

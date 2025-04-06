@@ -155,12 +155,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateInstructorProfile(name: String, subjects: List<String>) {
-        Log.d("AuthViewModel", "currenUserId: $currentUserId")
+    fun updateInstructorProfile(name: String, subjects: List<String>, availableHours: Map<String, List<String>>) {
         val currentUserId = currentUserId ?: return
         val updates = mapOf(
             "name" to name,
-            "subjects" to subjects
+            "subjects" to subjects,
+            "availableHours" to availableHours
         )
         db.collection("users").document(currentUserId).update(updates)
             .addOnSuccessListener {
