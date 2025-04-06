@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -158,6 +160,38 @@ fun SubjectsInput(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SubjectSelector(
+    subjects: List<String>,
+    selectedSubjects: List<String>,
+    onSubjectSelected: (String) -> Unit,
+    onSubjectDeselected: (String) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(subjects) { subject ->
+            val isSelected = selectedSubjects.contains(subject)
+            AssistChip(
+                onClick = {
+                    if (isSelected) {
+                        onSubjectDeselected(subject)
+                    } else {
+                        onSubjectSelected(subject)
+                    }
+                },
+                label = { Text(subject) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor =
+                        if (isSelected) MaterialTheme.colorScheme.primary else
+                            MaterialTheme.colorScheme.surface
+                )
+            )
         }
     }
 }
@@ -419,7 +453,9 @@ fun InstructorsHorizontalRow(
     instructors: List<User>,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+    Column(modifier = modifier
+        .fillMaxWidth()
+        .padding(bottom = 16.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge

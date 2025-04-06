@@ -165,7 +165,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         db.collection("users").document(currentUserId).update(updates)
             .addOnSuccessListener {
                 fetchCurrentUserData()
-                Log.d("AuthViewModel", "Uspjesno");
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error updating instructor profile", e)
