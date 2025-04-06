@@ -6,13 +6,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
 @Composable
-fun HomeScreen(
-    navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel(),
+fun ProfileScreen(
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val userData by authViewModel.userData.collectAsState()
 
@@ -21,8 +19,8 @@ fun HomeScreen(
     }
 
     when (userData?.role) {
-        "student" -> HomeScreenStudent()
-        "instructor" -> HomeScreenInstructor(navController)
+        //"student" -> ProfileScreenStudent()
+        "instructor" -> ProfileScreenInstructor()
         else -> CircularProgressIndicator()
     }
 }

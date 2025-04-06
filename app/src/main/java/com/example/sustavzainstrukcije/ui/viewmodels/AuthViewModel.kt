@@ -143,6 +143,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun fetchCurrentUserData() {
+        val currentUser = auth.currentUser
+        currentUserId = currentUser?.uid
+
         auth.currentUser?.uid?.let { userId ->
             db.collection("users").document(userId).get()
                 .addOnSuccessListener { document ->
@@ -150,6 +153,23 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         document.toObject(User::class.java)?.copy(id = userId)
                 }
         }
+    }
+
+    fun updateInstructorProfile(name: String, subjects: List<String>) {
+        Log.d("AuthViewModel", "currenUserId: $currentUserId")
+        val currentUserId = currentUserId ?: return
+        val updates = mapOf(
+            "name" to name,
+            "subjects" to subjects
+        )
+        db.collection("users").document(currentUserId).update(updates)
+            .addOnSuccessListener {
+                fetchCurrentUserData()
+                Log.d("AuthViewModel", "Uspjesno");
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error updating instructor profile", e)
+            }
     }
 
     companion object {
