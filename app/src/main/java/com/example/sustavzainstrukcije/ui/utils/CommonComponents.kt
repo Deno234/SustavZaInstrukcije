@@ -247,7 +247,8 @@ fun AvailableHoursInput(
     var selectedDay by remember { mutableStateOf("") }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
-    val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    val orderedDays =
+        listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
     val sortedAvailableHours = orderedDays.associateWith { day ->
         availableHours[day] ?: emptyList()
@@ -298,7 +299,8 @@ fun AvailableHoursInput(
                                                 onClick = {
                                                     val updated = availableHours.toMutableMap()
                                                     val currentSlots =
-                                                        updated[day]?.toMutableList() ?: mutableListOf()
+                                                        updated[day]?.toMutableList()
+                                                            ?: mutableListOf()
                                                     currentSlots.remove(slot)
                                                     updated[day] = currentSlots
                                                     onHoursUpdated(updated)
@@ -451,11 +453,14 @@ private fun TimePickerDialog(
 fun InstructorsHorizontalRow(
     title: String,
     instructors: List<User>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCheckProfile: (intructorId: String) -> Unit
 ) {
-    Column(modifier = modifier
-        .fillMaxWidth()
-        .padding(bottom = 16.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+    ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge
@@ -470,14 +475,19 @@ fun InstructorsHorizontalRow(
              * Efficient -> only updates changed items
              */
             items(instructors) { instructor ->
-                InstructorHorizontalCard(instructor = instructor)
+                InstructorHorizontalCard(
+                    instructor = instructor,
+                    onCheckProfile = { onCheckProfile(instructor.id) })
             }
         }
     }
 }
 
 @Composable
-fun InstructorHorizontalCard(instructor: User) {
+fun InstructorHorizontalCard(
+    instructor: User,
+    onCheckProfile: () -> Unit
+) {
     Card(
         modifier = Modifier
             .width(280.dp)
@@ -502,10 +512,10 @@ fun InstructorHorizontalCard(instructor: User) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = {},
+                onClick = onCheckProfile,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text("See Availability")
+                Text("Check Profile")
             }
         }
     }

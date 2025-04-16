@@ -27,12 +27,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.sustavzainstrukcije.ui.utils.InstructorsHorizontalRow
 import com.example.sustavzainstrukcije.ui.utils.SubjectDropdown
 import com.example.sustavzainstrukcije.ui.viewmodels.InstructorsViewModel
 
 @Composable
-fun HomeScreenStudent(instructorsViewModel: InstructorsViewModel = viewModel()) {
+fun HomeScreenStudent(navController: NavController, instructorsViewModel: InstructorsViewModel = viewModel()) {
     val isInstructorsLoading by instructorsViewModel.loadingState.collectAsState()
     val subjects by instructorsViewModel.subjects.collectAsState()
     val filteredGroupedInstructors by instructorsViewModel.filteredInstructors.collectAsState()
@@ -80,7 +81,11 @@ fun HomeScreenStudent(instructorsViewModel: InstructorsViewModel = viewModel()) 
             ) {
                 filteredGroupedInstructors.forEach { (subject, instructorList) ->
                     item {
-                        InstructorsHorizontalRow(title = subject, instructors = instructorList)
+                        InstructorsHorizontalRow(title = subject, instructors = instructorList,
+                            onCheckProfile = { instructorId ->
+                                navController.navigate("checkProfile/$instructorId")
+                            }
+                        )
                     }
                 }
             }

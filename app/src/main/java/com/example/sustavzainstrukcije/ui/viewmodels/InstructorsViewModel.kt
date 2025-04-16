@@ -18,12 +18,14 @@ class InstructorsViewModel (
     private val _loadingState = MutableStateFlow(false)
     private val _subjects = MutableStateFlow<List<String>>(emptyList())
     private val _filteredInstructors = MutableStateFlow<Map<String, List<User>>>(emptyMap())
+    private val _checkedInstructor = MutableStateFlow<User?>(null)
 
     private var snapshotListener: ListenerRegistration? = null
 
     val loadingState: StateFlow<Boolean> = _loadingState.asStateFlow()
     val subjects: StateFlow<List<String>> = _subjects.asStateFlow()
     val filteredInstructors: StateFlow<Map<String, List<User>>> = _filteredInstructors.asStateFlow()
+    val checkedInstructor: StateFlow<User?> = _checkedInstructor.asStateFlow()
 
     init {
         setupRealTimeUpdates()
@@ -70,6 +72,31 @@ class InstructorsViewModel (
                 }
             }
             .filterValues { it.isNotEmpty()}
+    }
+
+    fun fetchCheckedInstructor(instructorId: String) {
+        snapshotListener = firestore.collection("users")
+            .document(instructorId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("InstructorsViewModel", "Listen failed", error)
+                    _checkedInstructor.value = null
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null && snapshot.exists()) {
+                    try {
+                        val instructor = snapshot.toObject(User::class.java)?.copy(id = snapshot.id)
+                        _checkedInstructor.value = instructor
+                    } catch (e: Exception) {
+                        Log.e("InstructorsViewModel", "Error parsing document ${snapshot.id}", e)
+                        _checkedInstructor.value = null
+                    }
+                }
+                else {
+                    _checkedInstructor.value = null
+                }
+            }
     }
 
     override fun onCleared() {

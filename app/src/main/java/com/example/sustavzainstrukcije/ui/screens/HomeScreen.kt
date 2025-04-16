@@ -21,7 +21,7 @@ fun HomeScreen(
     }
 
     when (userData?.role) {
-        "student" -> HomeScreenStudent()
+        "student" -> HomeScreenStudent(navController)
         "instructor" -> HomeScreenInstructor(navController)
         else -> CircularProgressIndicator()
     }
