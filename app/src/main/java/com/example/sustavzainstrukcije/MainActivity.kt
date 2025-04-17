@@ -19,6 +19,8 @@ import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
+import com.google.firebase.Firebase
+import com.google.firebase.database.database
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -32,6 +34,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        //Firebase.database.setPersistenceEnabled(true)
+        //Firebase.database.reference.keepSynced(true)
 
         enableEdgeToEdge()
         setContent {

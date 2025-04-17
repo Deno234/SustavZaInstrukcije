@@ -82,6 +82,13 @@ fun CheckProfileScreen(
         }
         Spacer(modifier = Modifier.height(24.dp))
         Button(
+            onClick = { navController.navigate("chatWithInstructor/$instructorId") },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Chat with Instructor")
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
             onClick = { showTimeSlots = !showTimeSlots },
             modifier = Modifier.fillMaxWidth()
         ) {

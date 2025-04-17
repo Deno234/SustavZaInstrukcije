@@ -12,6 +12,7 @@ import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
+import com.example.sustavzainstrukcije.ui.screens.StudentChatScreen
 
 @Composable
 fun NavGraph(
@@ -53,6 +54,11 @@ fun NavGraph(
         composable("checkProfile/{instructorId}") { backStackEntry ->
             val instructorId = backStackEntry.arguments?.getString("instructorId") ?: ""
             CheckProfileScreen(instructorId = instructorId, navController = navController)
+        }
+
+        composable("chatWithInstructor/{instructorId}") { backStackEntry ->
+            val instructorId = backStackEntry.arguments?.getString("instructorId") ?: ""
+            StudentChatScreen(instructorId = instructorId, navController = navController)
         }
 
         /*composable("appointments") {
