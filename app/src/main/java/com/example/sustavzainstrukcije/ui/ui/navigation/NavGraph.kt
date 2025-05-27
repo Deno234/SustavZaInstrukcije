@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.screens.ChatScreen
 import com.example.sustavzainstrukcije.ui.screens.CheckProfileScreen
+import com.example.sustavzainstrukcije.ui.screens.FindInstructorsScreen
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
@@ -78,10 +79,11 @@ fun NavGraph(
             MessagesScreen(userId = userId, navController = navController)
         }
 
-        /*composable("appointments") {
-            AppointmentsScreen()
+        composable("findInstructorsScreen") {
+            FindInstructorsScreen(navController)
         }
 
+        /*
         composable("otherInstructors") {
             OtherInstructorsScreen()
         }*/
