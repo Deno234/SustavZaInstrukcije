@@ -12,16 +12,22 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import com.example.sustavzainstrukcije.ui.data.Message
 import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.ValueEventListener
 
 
 class ChatViewModel(private val db: DatabaseReference = Firebase.database.reference) : ViewModel() {
 
     fun sendMessage(chatId: String, message: Message) {
         val chatRef = db.child("chats").child(chatId)
+        val messagesRef = chatRef.child("messages")
         chatRef.child("participants").child(message.senderId).setValue(true)
         chatRef.child("participants").child(message.receiverId).setValue(true)
 
-        chatRef.child("messages").push().setValue(message)
+        val messageToSend = message.copy (
+            readBy = mapOf(message.senderId to true)
+        )
+
+        messagesRef.push().setValue(messageToSend)
             .addOnSuccessListener {
                 Log.d("ChatViewModel", "Message written directly")
             }
@@ -50,33 +56,67 @@ class ChatViewModel(private val db: DatabaseReference = Firebase.database.refere
             }
         }
 
-        val listener = query
-            .addChildEventListener(object : ChildEventListener {
-                override fun onChildAdded(snapshot: DataSnapshot, prevKey: String?) {
-                    snapshot.getValue(Message::class.java)?.let { message ->
+        val listener = query.addChildEventListener(object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, prevKey: String?) {
+                snapshot.getValue(Message::class.java)?.let { message ->
+                    if (!messages.any { msg ->
+                            msg.timestamp == message.timestamp && msg.senderId == message.senderId && msg.text == message.text
+                        }) {
                         messages.add(message)
+                    }
+                    trySend(messages.toList().sortedBy { it.timestamp })
+                }
+            }
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
+                snapshot.getValue(Message::class.java)?.let { updatedMessage ->
+                    val index = messages.indexOfFirst { msg ->
+                        msg.timestamp == updatedMessage.timestamp && msg.senderId == updatedMessage.senderId && msg.text == updatedMessage.text
+                    }
+                    if (index != -1) {
+                        messages[index] = updatedMessage
                         trySend(messages.toList().sortedBy { it.timestamp })
                     }
                 }
+            }
+            override fun onChildRemoved(snapshot: DataSnapshot) { /* ... */ }
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) { /* ... */ }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("ChatViewModel", "Listener cancelled", error.toException())
+                close(error.toException())
+            }
+        })
 
-                override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-                    TODO("Not yet implemented")
-                }
+        awaitClose { query.removeEventListener(listener) }
+    }
 
-                override fun onChildRemoved(snapshot: DataSnapshot) {
-                    Log.d("ChatViewModel", "onChildRemoved: Poruka obrisana (key: ${snapshot.key}), (value: ${snapshot.value})")
-                }
+    fun markMessagesAsRead(chatId: String, readerUserId: String) {
+        val messagesRef = db.child("chats").child(chatId).child("messages")
 
-                override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {
-                    TODO("Not yet implemented")
+        messagesRef.orderByChild("receiverId").equalTo(readerUserId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    snapshot.children.forEach { messageSnapshot ->
+                        val message = messageSnapshot.getValue(Message::class.java)
+                        val messageKey = messageSnapshot.key
+
+                        if (message != null && messageKey != null && message.receiverId == readerUserId) {
+                            val isAlreadyReadByReader = message.readBy[readerUserId] == true
+                            if (!isAlreadyReadByReader) {
+                                messagesRef.child(messageKey).child("readBy").child(readerUserId).setValue(true)
+                                    .addOnSuccessListener {
+                                        Log.d("ChatViewModel", "Message $messageKey marked as read by $readerUserId")
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e("ChatViewModel", "Failed to mark message $messageKey as read", e)
+                                    }
+                            }
+                        }
+                    }
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    Log.e("ChatViewModel", "Listener cancelled", error.toException())
-                    close(error.toException())
+                    Log.e("ChatViewModel", "Error marking messages as read", error.toException())
                 }
             })
-
-        awaitClose { query.removeEventListener(listener) }
     }
 }

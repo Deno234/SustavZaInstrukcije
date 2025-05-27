@@ -1,25 +1,31 @@
 package com.example.sustavzainstrukcije.ui.screens
 
 import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.example.sustavzainstrukcije.ui.data.ChatInfo // Importaj novu klasu
-import com.example.sustavzainstrukcije.ui.data.Message // [1]
-import com.example.sustavzainstrukcije.ui.data.User // [2]
-import com.example.sustavzainstrukcije.ui.viewmodels.UserViewModel // Pretpostavka da postoji
+import com.example.sustavzainstrukcije.ui.data.ChatInfo
+import com.example.sustavzainstrukcije.ui.data.Message
+import com.example.sustavzainstrukcije.ui.viewmodels.UserViewModel
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
@@ -31,7 +37,6 @@ import java.util.Locale
 
 @Composable
 fun MessagesScreen(userId: String, navController: NavHostController) {
-    // Sada koristimo listu ChatInfo objekata
     val chatInfos = remember { mutableStateListOf<ChatInfo>() }
 
     DisposableEffect(userId) {
@@ -39,49 +44,51 @@ fun MessagesScreen(userId: String, navController: NavHostController) {
 
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                chatInfos.clear()
                 val tempChatInfos = mutableListOf<ChatInfo>()
 
                 snapshot.children.forEach { chatSnapshot ->
                     val chatId = chatSnapshot.key
                     var isUserParticipant = false
                     var lastMessage: Message? = null
+                    var unreadMessagesCount = 0
 
-                    // Iteriraj kroz poruke da pronađeš zadnju i provjeriš sudjelovanje
                     chatSnapshot.child("messages").children.forEach { messageData ->
                         val message = messageData.getValue(Message::class.java)
                         if (message != null) {
                             if (message.senderId == userId || message.receiverId == userId) {
                                 isUserParticipant = true
                             }
-                            // Pronađi najnoviju poruku
                             if (lastMessage == null || message.timestamp > lastMessage!!.timestamp) {
                                 lastMessage = message
+                            }
+                            // Provjeri je li poruka nepročitana za trenutnog korisnika
+                            if (message.receiverId == userId && message.readBy[userId] != true) {
+                                unreadMessagesCount++
                             }
                         }
                     }
 
                     if (isUserParticipant && chatId != null && lastMessage != null) {
-                        // Odredi ID drugog korisnika
                         val otherUserId = if (lastMessage!!.senderId == userId) {
                             lastMessage!!.receiverId
                         } else {
                             lastMessage!!.senderId
                         }
 
-                        if (otherUserId.isNotEmpty()) { // Osiguraj da otherUserId nije prazan
+                        if (otherUserId.isNotEmpty()) {
                             tempChatInfos.add(
                                 ChatInfo(
                                     chatId = chatId,
                                     otherUserId = otherUserId,
                                     lastMessageTimestamp = lastMessage!!.timestamp,
-                                    lastMessageText = lastMessage!!.text
+                                    lastMessageText = lastMessage!!.text,
+                                    unreadCount = unreadMessagesCount
                                 )
                             )
                         }
                     }
                 }
-                // Sortiraj chatove po timestampu zadnje poruke, od najnovije do najstarije
+                chatInfos.clear()
                 chatInfos.addAll(tempChatInfos.sortedByDescending { it.lastMessageTimestamp })
             }
 
@@ -97,9 +104,9 @@ fun MessagesScreen(userId: String, navController: NavHostController) {
     }
 
     LazyColumn {
-        items(chatInfos) { chatInfo -> // Iteriraj kroz chatInfos
+        items(chatInfos) { chatInfo ->
             ChatListItem(
-                chatInfo = chatInfo, // Proslijedi cijeli ChatInfo objekt
+                chatInfo = chatInfo,
                 currentUserId = userId,
                 navController = navController
             )
@@ -108,43 +115,65 @@ fun MessagesScreen(userId: String, navController: NavHostController) {
 }
 
 
+
 @Composable
 fun ChatListItem(
-    chatInfo: ChatInfo, // Primi ChatInfo objekt
+    chatInfo: ChatInfo,
     currentUserId: String,
     navController: NavHostController,
-    userViewModel: UserViewModel = viewModel() // UserViewModel za dohvaćanje podataka o korisniku
+    userViewModel: UserViewModel = viewModel()
 ) {
-    // Dohvati podatke o drugom korisniku koristeći njegov ID iz chatInfo
     val otherUserDetails by userViewModel.getUserById(chatInfo.otherUserId).collectAsState(initial = null)
 
-    Column(
+    val titleFontWeight = if (chatInfo.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
+    val lastMessageFontWeight = if (chatInfo.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal
+    val lastMessageColor = if (chatInfo.unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+
+
+    Row(
         modifier = Modifier
-            .fillMaxWidth() // Neka zauzme cijelu širinu
+            .fillMaxWidth()
             .clickable {
-                // Navigiraj na ChatScreen s chatId i otherUserId
                 navController.navigate("chat/${chatInfo.chatId}/${chatInfo.otherUserId}")
             }
-            .padding(top = 30.dp, bottom = 16.dp).padding(horizontal = 16.dp)
+            .padding(top = 20.dp).padding(vertical = 12.dp, horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            // Prikaz imena drugog korisnika ako je dostupno, inače njegov ID
-            text = otherUserDetails?.name ?: "Korisnik ${chatInfo.otherUserId.take(6)}...",
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium
-        )
-        // Opcionalno: Prikaz zadnje poruke
-        Text(
-            text = chatInfo.lastMessageText.take(40) + if (chatInfo.lastMessageText.length > 40) "..." else "", // Prikaz dijela zadnje poruke
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        // Opcionalno: Prikaz vremena zadnje poruke
-        Text(
-            text = SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault()).format(Date(chatInfo.lastMessageTimestamp)),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline
-        )
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                text = otherUserDetails?.name ?: "Korisnik ${chatInfo.otherUserId.take(6)}...",
+                fontWeight = titleFontWeight,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = chatInfo.lastMessageText.take(30) + if (chatInfo.lastMessageText.length > 30) "..." else "",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = lastMessageFontWeight,
+                color = lastMessageColor
+            )
+            Text(
+                text = SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault()).format(Date(chatInfo.lastMessageTimestamp)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+
+        if (chatInfo.unreadCount > 0) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = chatInfo.unreadCount.toString(),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
     HorizontalDivider()
 }

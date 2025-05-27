@@ -15,9 +15,7 @@ import kotlinx.coroutines.launch
 
 class UserViewModel : ViewModel() {
 
-    // Inicijaliziraj instancu Cloud Firestore-a
     private val db = FirebaseFirestore.getInstance()
-    // Referenca na kolekciju 'users' u Firestore-u
     private val usersCollectionRef = db.collection("users")
 
     /**
@@ -30,17 +28,15 @@ class UserViewModel : ViewModel() {
             // Referenca na specifični dokument korisnika u kolekciji 'users'
             val userDocumentRef = usersCollectionRef.document(userId)
 
-            // addSnapshotListener registrira listener koji se poziva na svaku promjenu podataka [8][9]
+            // addSnapshotListener registrira listener koji se poziva na svaku promjenu podataka
             val listenerRegistration = userDocumentRef.addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.w("UserViewModel", "Listen failed.", error)
-                    // U slučaju greške, možeš zatvoriti Flow s iznimkom ili emitirati null
                     close(error)
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null && snapshot.exists()) {
-                    // Konvertiraj dokument snapshot u User objekt
                     val user = snapshot.toObject<User>()
                     trySend(user) // Emitiraj dohvaćenog korisnika
                 } else {
@@ -50,15 +46,12 @@ class UserViewModel : ViewModel() {
             }
 
             // awaitClose se poziva kada se Flow zatvori (npr. kada CoroutineScope prestane s radom)
-            // Ovdje uklanjamo listener da spriječimo curenje memorije
             awaitClose {
                 listenerRegistration.remove()
             }
         }
     }
 
-    // Alternativa: Ako želiš dohvatiti podatke samo jednom (ne pratiti promjene)
-    // i upravljati stanjem unutar ViewModela koristeći StateFlow.
     private val _specificUser = MutableStateFlow<User?>(null)
     val specificUser: StateFlow<User?> = _specificUser
 

@@ -3,7 +3,7 @@ package com.example.sustavzainstrukcije.ui.screens
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,8 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.sustavzainstrukcije.ui.data.Message // Vaša Message data klasa [1]
-import com.example.sustavzainstrukcije.ui.viewmodels.ChatViewModel // Vaš ChatViewModel [4]
+import com.example.sustavzainstrukcije.ui.data.Message
+import com.example.sustavzainstrukcije.ui.viewmodels.ChatViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.UserViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -28,24 +28,31 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    chatId: String,       // ID chata, generiran simetrično
-    otherUserId: String,  // ID drugog korisnika u chatu
-    navController: NavController, // NavController ostaje
+    chatId: String,
+    otherUserId: String,
+    navController: NavController,
     userViewModel: UserViewModel = viewModel(),
-    chatViewModel: ChatViewModel = viewModel()   // ChatViewModel
+    chatViewModel: ChatViewModel = viewModel()
 ) {
-    val currentUser = Firebase.auth.currentUser // Trenutno prijavljeni korisnik
-    // Opcionalno: dohvati podatke o drugom korisniku ako želiš prikazati ime
+    val currentUser = Firebase.auth.currentUser
     val otherUserDetails by userViewModel.getUserById(otherUserId).collectAsState(initial = null)
 
     var newMessage by remember { mutableStateOf("") }
     val messages by chatViewModel.getMessages(chatId)
         .collectAsState(initial = emptyList())
 
-    val listState = rememberLazyListState() // Za automatsko scrollanje na dno
+    val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Automatsko scrollanje na dno kada se dodaju nove poruke
+    LaunchedEffect(chatId, currentUser?.uid) {
+        currentUser?.uid?.let { currentUserId ->
+            if (currentUserId.isNotEmpty() && chatId.isNotEmpty()) {
+                Log.d("ChatScreen", "Attempting to mark messages as read for chat: $chatId by user: $currentUserId")
+                chatViewModel.markMessagesAsRead(chatId, currentUserId)
+            }
+        }
+    }
+
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             coroutineScope.launch {
@@ -54,22 +61,29 @@ fun ChatScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(top = 4.dp, bottom = 40.dp)) {
-        // Opcionalno: Prikaz imena drugog korisnika na vrhu ekrana
-        TopAppBar(title = { Text(otherUserDetails?.name ?: "Chat") })
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(bottom = 40.dp)
+    ) {
+        TopAppBar(title = { Text(otherUserDetails?.name ?: "Chat s ${otherUserId.take(6)}") })
 
         LazyColumn(
             state = listState,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)
         ) {
-            items(messages) { message -> // Nije potrebno sortirati ovdje ako getMessages već vraća sortiranu listu
+            itemsIndexed(messages) { _, message ->
+                val lastSentMessageByCurrentUser = messages.lastOrNull { it.senderId == currentUser?.uid }
+                val isTheVeryLastMessageByCurrentUserAndRead = lastSentMessageByCurrentUser == message && message.readBy[message.receiverId] == true
+
                 MessageBubble(
-                    text = message.text,
+                    message = message,
                     isUser = message.senderId == currentUser?.uid,
-                    senderId = message.senderId,
-                    timestamp = message.timestamp
+                    showSeenIndicator = isTheVeryLastMessageByCurrentUserAndRead
                 )
             }
         }
@@ -117,7 +131,7 @@ fun ChatScreen(
 }
 
 @Composable
-fun MessageBubble(text: String, isUser: Boolean, senderId: String, timestamp: Long) {
+fun MessageBubble(message: Message, isUser: Boolean, showSeenIndicator: Boolean) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
@@ -132,18 +146,32 @@ fun MessageBubble(text: String, isUser: Boolean, senderId: String, timestamp: Lo
             modifier = Modifier.padding(vertical = 4.dp)
         ) {
             Text(
-                text = text,
+                text = message.text,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-         Text(
-             text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp)),
-             style = MaterialTheme.typography.bodySmall,
-             color = Color.Gray,
-             modifier = Modifier.padding(horizontal = 4.dp)
-         )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+        ) {
+            Text(
+                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp)),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            if (isUser && showSeenIndicator) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Seen",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
     }
 }
-
