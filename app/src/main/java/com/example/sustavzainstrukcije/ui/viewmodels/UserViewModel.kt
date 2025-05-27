@@ -62,7 +62,7 @@ class UserViewModel : ViewModel() {
                     if (documentSnapshot.exists()) {
                         _specificUser.value = documentSnapshot.toObject<User>()
                     } else {
-                        _specificUser.value = null // Korisnik ne postoji
+                        _specificUser.value = null
                     }
                 }
                 .addOnFailureListener { exception ->

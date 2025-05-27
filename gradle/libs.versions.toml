@@ -50,7 +50,8 @@ firebase-auth = { module = "com.google.firebase:firebase-auth"}
 firebase-firestore = { module = "com.google.firebase:firebase-firestore"}
 firebase-storage = { module = "com.google.firebase:firebase-storage"}
 firebase-functions = { module = "com.google.firebase:firebase-functions"}
-firebase-messaging = { module = "com.google.firebase:firebase-messaging"}
+firebase-messaging = { module = "com.google.firebase:firebase-messaging-ktx"}
+firebase-analytics = { module = "com.google.firebase:firebase-analytics-ktx"}
 firebase-database = { module = "com.google.firebase:firebase-database"}
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-ktx", version.ref = "media3CommonKtx" }

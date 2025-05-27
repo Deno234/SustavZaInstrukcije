@@ -78,6 +78,7 @@ dependencies {
     implementation(libs.firebase.functions)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.database)
+    implementation(libs.firebase.analytics)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.media3.common.ktx)
     implementation(libs.material)
