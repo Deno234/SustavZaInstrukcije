@@ -1,5 +1,6 @@
 package com.example.sustavzainstrukcije.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,7 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 
 @Composable
-fun HomeScreenInstructor(navController: NavHostController) {
+fun HomeScreenInstructor(navController: NavHostController, instructorId: String?) {
+    Log.d("HomeScreenInstructor", "Instructor id: $instructorId")
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -36,7 +38,7 @@ fun HomeScreenInstructor(navController: NavHostController) {
         }
 
         Button(
-            onClick = { navController.navigate("messages") },
+            onClick = { navController.navigate("messages/$instructorId") },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("My Messages")

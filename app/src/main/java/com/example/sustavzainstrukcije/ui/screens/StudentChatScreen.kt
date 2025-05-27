@@ -77,6 +77,7 @@ fun StudentChatScreen(
                     message = Message(
                         newMessage,
                         currentUser?.uid ?: "",
+                        instructorId,
                         System.currentTimeMillis()
                     )
                 )

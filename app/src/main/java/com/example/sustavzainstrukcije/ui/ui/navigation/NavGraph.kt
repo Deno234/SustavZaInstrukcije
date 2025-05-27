@@ -1,5 +1,6 @@
 package com.example.sustavzainstrukcije.ui.ui.navigation
 
+import com.example.sustavzainstrukcije.ui.screens.MessagesScreen
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -61,12 +62,15 @@ fun NavGraph(
             StudentChatScreen(instructorId = instructorId, navController = navController)
         }
 
-        /*composable("appointments") {
-            AppointmentsScreen()
+        composable("messages/{userId}") { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId")
+            if (userId != null) {
+                MessagesScreen(userId = userId, navController = navController)
+            }
         }
 
-        composable("messages") {
-            MessagesScreen()
+        /*composable("appointments") {
+            AppointmentsScreen()
         }
 
         composable("otherInstructors") {

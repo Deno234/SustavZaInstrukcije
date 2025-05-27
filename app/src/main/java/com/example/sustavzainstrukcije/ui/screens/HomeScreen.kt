@@ -1,5 +1,6 @@
 package com.example.sustavzainstrukcije.ui.screens
 
+import android.util.Log
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,7 +23,7 @@ fun HomeScreen(
 
     when (userData?.role) {
         "student" -> HomeScreenStudent(navController)
-        "instructor" -> HomeScreenInstructor(navController)
+        "instructor" -> HomeScreenInstructor(navController, userData!!.id)
         else -> CircularProgressIndicator()
     }
 }
