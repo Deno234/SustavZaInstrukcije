@@ -16,10 +16,10 @@ import com.google.firebase.database.DatabaseReference
 
 class ChatViewModel(private val db: DatabaseReference = Firebase.database.reference) : ViewModel() {
 
-    fun sendMessage(instructorId: String, chatId: String, message: Message) {
+    fun sendMessage(chatId: String, message: Message) {
         val chatRef = db.child("chats").child(chatId)
         chatRef.child("participants").child(message.senderId).setValue(true)
-        chatRef.child("participants").child(instructorId).setValue(true)
+        chatRef.child("participants").child(message.receiverId).setValue(true)
 
         chatRef.child("messages").push().setValue(message)
             .addOnSuccessListener {
@@ -64,7 +64,7 @@ class ChatViewModel(private val db: DatabaseReference = Firebase.database.refere
                 }
 
                 override fun onChildRemoved(snapshot: DataSnapshot) {
-                    TODO("Not yet implemented")
+                    Log.d("ChatViewModel", "onChildRemoved: Poruka obrisana (key: ${snapshot.key}), (value: ${snapshot.value})")
                 }
 
                 override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {

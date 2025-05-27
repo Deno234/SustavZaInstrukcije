@@ -1,11 +1,13 @@
 package com.example.sustavzainstrukcije.ui.ui.navigation
 
+import androidx.compose.material3.Text
 import com.example.sustavzainstrukcije.ui.screens.MessagesScreen
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.sustavzainstrukcije.ui.screens.ChatScreen
 import com.example.sustavzainstrukcije.ui.screens.CheckProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
@@ -13,7 +15,6 @@ import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
-import com.example.sustavzainstrukcije.ui.screens.StudentChatScreen
 
 @Composable
 fun NavGraph(
@@ -57,16 +58,24 @@ fun NavGraph(
             CheckProfileScreen(instructorId = instructorId, navController = navController)
         }
 
-        composable("chatWithInstructor/{instructorId}") { backStackEntry ->
-            val instructorId = backStackEntry.arguments?.getString("instructorId") ?: ""
-            StudentChatScreen(instructorId = instructorId, navController = navController)
+        composable("chat/{chatId}/{otherUserId}") { backStackEntry ->
+            val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
+            val otherUserId = backStackEntry.arguments?.getString("otherUserId") ?: ""
+
+            if (chatId.isNotEmpty() && otherUserId.isNotEmpty()) {
+                ChatScreen(
+                    chatId = chatId,
+                    otherUserId = otherUserId,
+                    navController = navController
+                )
+            } else {
+                Text("Greška: ID chata ili ID drugog korisnika nedostaje.")
+            }
         }
 
         composable("messages/{userId}") { backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId")
-            if (userId != null) {
-                MessagesScreen(userId = userId, navController = navController)
-            }
+            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+            MessagesScreen(userId = userId, navController = navController)
         }
 
         /*composable("appointments") {
