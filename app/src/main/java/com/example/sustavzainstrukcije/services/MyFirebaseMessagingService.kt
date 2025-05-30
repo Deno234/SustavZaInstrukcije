@@ -42,36 +42,42 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        Log.d(TAG, "From: ${remoteMessage.from}")
+        Log.d(TAG, "Message received from: ${remoteMessage.from}")
+        Log.d(TAG, "Message data: ${remoteMessage.data}")
 
         remoteMessage.data.isNotEmpty().let {
-            Log.d(TAG, "Message data payload: " + remoteMessage.data)
-
             val title = remoteMessage.data["title"] ?: remoteMessage.notification?.title ?: "Nova poruka"
             val body = remoteMessage.data["body"] ?: remoteMessage.notification?.body ?: ""
             val chatId = remoteMessage.data["chatId"]
             val otherUserId = remoteMessage.data["otherUserId"]
 
+            Log.d(TAG, "Extracted data - chatId: $chatId, otherUserId: $otherUserId")
             sendNotification(title, body, chatId, otherUserId)
-        }
-
-        remoteMessage.notification?.let {
-            Log.d(TAG, "Message Notification Body: ${it.body}")
         }
     }
 
     private fun sendNotification(title: String, messageBody: String, chatId: String?, otherUserId: String?) {
-        val intent = Intent(this, MainActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        if (chatId != null && otherUserId != null) {
-            intent.putExtra("chatId", chatId)
-            intent.putExtra("otherUserId", otherUserId)
-            intent.putExtra("navigateTo", "ChatScreen")
+
+        Log.d(TAG, "Creating notification with chatId: $chatId, otherUserId: $otherUserId")
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            // KLJUČNA PROMJENA: Dodaj jedinstvenu ACTION
+            action = "NOTIFICATION_CHAT_ACTION_${System.currentTimeMillis()}"
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+            if (chatId != null && otherUserId != null) {
+                putExtra("chatId", chatId)
+                putExtra("otherUserId", otherUserId)
+                putExtra("navigateTo", "ChatScreen")
+                Log.d(TAG, "Added extras to intent: chatId=$chatId, otherUserId=$otherUserId")
+            }
         }
 
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
@@ -86,14 +92,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Nove Poruke",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
 
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Nove Poruke",
-            NotificationManager.IMPORTANCE_HIGH
-        )
-        notificationManager.createNotificationChannel(channel)
-
-        notificationManager.notify(0, notificationBuilder.build())
+        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build()) // Koristi jedinstveni ID
     }
+
 }

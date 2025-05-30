@@ -278,4 +278,5 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "AuthViewModel"
     }
+
 }

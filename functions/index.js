@@ -78,6 +78,7 @@ exports.sendNewMessageNotification = onValueCreated(
             senderName: senderName,
             title: `Nova poruka od ${senderName}`,
             body: messageText,
+            navigateTo: "ChatScreen",
           },
           token: token,
         }));

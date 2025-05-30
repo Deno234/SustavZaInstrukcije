@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
@@ -26,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
+import com.example.sustavzainstrukcije.ui.utils.generateChatId
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.launch
 
@@ -33,6 +35,8 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: AuthViewModel by viewModels()
     private lateinit var appNavController: NavHostController
+
+    private var pendingChatNavigation: Pair<String, String>? = null
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -54,6 +58,13 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(appNavController) {
                     viewModel.checkAuthState()
+                }
+
+                LaunchedEffect(viewModel.isAuthenticated.collectAsState().value, appNavController) {
+                    val isAuth = viewModel.isAuthenticated.value
+                    if (isAuth == true) {
+                        handleIntentExtras(intent)
+                    }
                 }
 
                 Surface(
@@ -86,7 +97,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         askNotificationPermission()
-        intent?.let { handleIntentExtras(it) }
     }
 
     private fun askNotificationPermission() {
@@ -116,37 +126,83 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.d("MainActivity", "onNewIntent called with intent: $intent")
+        Log.d("MainActivity", "onNewIntent called - app was already running")
         setIntent(intent)
-        handleIntentExtras(intent)
+
+        // Provjeri je li korisnik autentificiran prije navigacije
+        if (viewModel.isAuthenticated.value == true) {
+            handleIntentExtras(intent)
+        } else {
+            Log.d("MainActivity", "User not authenticated in onNewIntent, will handle after auth")
+        }
     }
 
     private fun handleIntentExtras(intent: Intent) {
-        Log.d("MainActivity", "Handling intent extras. Action: ${intent.action}, Data: ${intent.dataString}, Extras: ${intent.extras}")
-        if (intent.getStringExtra("navigateTo") == "ChatScreen") {
-            val chatId = intent.getStringExtra("chatId")
-            val otherUserId = intent.getStringExtra("otherUserId")
-            Log.d("MainActivity", "Intent extras for ChatScreen: chatId=$chatId, otherUserId=$otherUserId")
+        Log.d("MainActivity", "=== HANDLING INTENT EXTRAS ===")
+        Log.d("MainActivity", "Intent action: ${intent.action}")
+        Log.d("MainActivity", "Intent flags: ${intent.flags}")
 
-            if (chatId != null && otherUserId != null) {
-                if (::appNavController.isInitialized) {
-                    appNavController.navigate("chat/$chatId/$otherUserId") {
-                        launchSingleTop = true
+        intent.extras?.let { extras ->
+            Log.d("MainActivity", "Found ${extras.size()} extras:")
+            for (key in extras.keySet()) {
+                Log.d("MainActivity", "  Extra: $key = ${extras.get(key)}")
+            }
+        } ?: Log.d("MainActivity", "No extras found in intent")
+
+        // Provjeri i FCM podatke i MyFirebaseMessagingService podatke
+        val navigateTo = intent.getStringExtra("navigateTo")
+        val chatId = intent.getStringExtra("chatId")
+        val otherUserId = intent.getStringExtra("otherUserId")
+
+        Log.d("MainActivity", "NavigateTo value: '$navigateTo'")
+        Log.d("MainActivity", "ChatId: '$chatId', OtherUserId: '$otherUserId'")
+
+        // Provjeri ima li podataka za navigaciju (bilo iz MyFirebaseMessagingService ili direktno iz FCM)
+        if ((navigateTo == "ChatScreen" || (chatId != null && otherUserId != null)) &&
+            chatId != null && otherUserId != null) {
+
+            Log.d("MainActivity", "Chat navigation requested: chatId=$chatId, otherUserId=$otherUserId")
+
+            if (::appNavController.isInitialized) {
+                val currentUserId = viewModel.currentUserId
+                Log.d("MainActivity", "Current user ID: $currentUserId")
+
+                if (currentUserId != null) {
+                    Log.d("MainActivity", "All conditions met, attempting navigation...")
+
+                    lifecycleScope.launch {
+                        kotlinx.coroutines.delay(1000)
+
+                        try {
+                            appNavController.navigate("chat/$chatId/$otherUserId") {
+                                launchSingleTop = true
+                            }
+                            Log.i("MainActivity", "✅ Successfully navigated to chat: $chatId with user: $otherUserId")
+
+                            // Očisti intent
+                            intent.removeExtra("navigateTo")
+                            intent.removeExtra("chatId")
+                            intent.removeExtra("otherUserId")
+                            intent.action = null
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "❌ Navigation failed: ${e.message}", e)
+                        }
                     }
-                    Log.i("MainActivity", "Navigated to chat: $chatId with user: $otherUserId")
                 } else {
-                    Log.e("MainActivity", "NavController not initialized when trying to navigate from notification.")
+                    Log.w("MainActivity", "❌ Current user ID is null, cannot navigate to chat")
                 }
             } else {
-                Log.w("MainActivity", "chatId or otherUserId is null in intent extras for ChatScreen.")
+                Log.w("MainActivity", "❌ NavController not initialized")
             }
         } else {
-            Log.d("MainActivity", "No specific navigation action ('ChatScreen') in intent or navigateTo extra is missing/different.")
+            Log.d("MainActivity", "No ChatScreen navigation requested. NavigateTo: '$navigateTo', ChatId: '$chatId', OtherUserId: '$otherUserId'")
         }
+        Log.d("MainActivity", "=== END HANDLING INTENT EXTRAS ===")
     }
+
+
 }
 
-// Preview ostaje isti
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {
