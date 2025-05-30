@@ -7,6 +7,8 @@ initializeApp();
 
 const firestore = getFirestore();
 
+const lastMessageTimestamps = new Map();
+
 exports.sendNewMessageNotification = onValueCreated(
     {
       ref: "/chats/{chatId}/messages/{messageId}",
@@ -20,10 +22,25 @@ exports.sendNewMessageNotification = onValueCreated(
       const senderId = messageData.senderId;
       const receiverId = messageData.receiverId;
       const messageText = messageData.text;
+      const messageTimestamp = messageData.timestamp;
 
       // 1. Nemoj slati notifikaciju pošiljatelju
       if (senderId === receiverId) {
         console.log("Sender is the same as receiver, no notification sent.");
+        return null;
+      }
+
+      const lastTimestamp = lastMessageTimestamps.get(senderId) || 0;
+      if (messageTimestamp <= lastTimestamp) {
+        return null;
+      }
+
+      // Dodaj kratki delay da se osigura da su sve poruke stigle
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Provjeri je li ova poruka još uvijek najnovija
+      const currentLatestTimestamp = lastMessageTimestamps.get(senderId);
+      if (messageTimestamp < currentLatestTimestamp) {
         return null;
       }
 
@@ -67,11 +84,6 @@ exports.sendNewMessageNotification = onValueCreated(
 
         // Kreiraj poruke za svaki token
         const messages = recipientTokens.map((token) => ({
-          notification: {
-            title: `Nova poruka od ${senderName}`,
-            body: messageText.length > 100 ?
-                    messageText.substring(0, 97) + "..." : messageText,
-          },
           data: {
             chatId: chatId,
             otherUserId: senderId,

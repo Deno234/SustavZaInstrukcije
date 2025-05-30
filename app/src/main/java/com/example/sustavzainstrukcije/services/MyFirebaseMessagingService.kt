@@ -22,6 +22,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private const val TAG = "MyFirebaseMsgService"
         private const val CHANNEL_ID = "new_message_channel"
+        var currentActiveChatId: String? = null
+        private val messageCache = mutableMapOf<String, MutableList<String>>()
+
+        fun clearMessagesForUser(userId: String) {
+            messageCache.remove(userId)
+            Log.d(TAG, "Cleared message cache for user: $userId")
+        }
     }
 
 
@@ -46,22 +53,42 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "Message data: ${remoteMessage.data}")
 
         remoteMessage.data.isNotEmpty().let {
-            val title = remoteMessage.data["title"] ?: remoteMessage.notification?.title ?: "Nova poruka"
-            val body = remoteMessage.data["body"] ?: remoteMessage.notification?.body ?: ""
+            val title = remoteMessage.data["title"] ?: "Nova poruka"
+            val body = remoteMessage.data["body"] ?: ""
             val chatId = remoteMessage.data["chatId"]
             val otherUserId = remoteMessage.data["otherUserId"]
+            val senderName = remoteMessage.data["senderName"] ?: "Netko"
 
             Log.d(TAG, "Extracted data - chatId: $chatId, otherUserId: $otherUserId")
-            sendNotification(title, body, chatId, otherUserId)
+            Log.d(TAG, "Current active chat: $currentActiveChatId")
+
+            if (currentActiveChatId == chatId) {
+                Log.d(TAG, "User is currently in this chat, not showing notification")
+                return@let
+            }
+
+            if (otherUserId != null) {
+                val userMessages = messageCache.getOrPut(otherUserId) { mutableListOf() }
+                userMessages.add(body)
+
+                if (userMessages.size > 5) {
+                    userMessages.removeAt(0)
+                }
+
+                sendGroupedNotification(senderName, userMessages, chatId, otherUserId)
+            }
         }
     }
 
-    private fun sendNotification(title: String, messageBody: String, chatId: String?, otherUserId: String?) {
-
-        Log.d(TAG, "Creating notification with chatId: $chatId, otherUserId: $otherUserId")
+    private fun sendGroupedNotification(
+        senderName: String,
+        messages: List<String>,
+        chatId: String?,
+        otherUserId: String?
+    ) {
+        Log.d(TAG, "Creating grouped notification for $senderName with ${messages.size} messages")
 
         val intent = Intent(this, MainActivity::class.java).apply {
-            // KLJUČNA PROMJENA: Dodaj jedinstvenu ACTION
             action = "NOTIFICATION_CHAT_ACTION_${System.currentTimeMillis()}"
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
@@ -69,26 +96,51 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 putExtra("chatId", chatId)
                 putExtra("otherUserId", otherUserId)
                 putExtra("navigateTo", "ChatScreen")
-                Log.d(TAG, "Added extras to intent: chatId=$chatId, otherUserId=$otherUserId")
             }
         }
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            System.currentTimeMillis().toInt(),
+            otherUserId.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val notificationId = otherUserId.hashCode()
+
+        val inboxStyle = NotificationCompat.InboxStyle()
+
+        messages.takeLast(5).forEach { message ->
+            inboxStyle.addLine(message)
+        }
+
+        val messageCount = messages.size
+        val bigTitle = if (messageCount > 1) {
+            "$messageCount ${if (messageCount < 5) "poruke" else "poruka"} od $senderName"
+        } else {
+            "Nova poruka od $senderName"
+        }
+
+        inboxStyle.setBigContentTitle(bigTitle)
+
+        if (messageCount > 1) {
+            inboxStyle.setSummaryText("Kliknite za otvaranje chata")
+        }
+
         val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setContentText(messageBody)
+            .setContentTitle(bigTitle)
+            .setContentText(messages.last())
+            .setStyle(inboxStyle)
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setWhen(System.currentTimeMillis())
+            .setNumber(messageCount)
+            .setGroup("chat_group_$otherUserId")
+            .setOnlyAlertOnce(messageCount == 1)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -101,7 +153,66 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build()) // Koristi jedinstveni ID
+        // Prikaži/ažuriraj notifikaciju s istim ID (zamijenit će prethodnu)
+        notificationManager.notify(notificationId, notificationBuilder.build())
+        Log.d(TAG, "Grouped notification sent with $messageCount messages")
     }
+
+
+    private fun sendNotification(title: String, messageBody: String, chatId: String?, otherUserId: String?) {
+        Log.d(TAG, "Creating notification with chatId: $chatId, otherUserId: $otherUserId")
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = "NOTIFICATION_CHAT_ACTION_${System.currentTimeMillis()}"
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+            if (chatId != null && otherUserId != null) {
+                putExtra("chatId", chatId)
+                putExtra("otherUserId", otherUserId)
+                putExtra("navigateTo", "ChatScreen")
+            }
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            otherUserId.hashCode(), // Koristi otherUserId kao unique ID za svaki chat
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+        val groupKey = "chat_group_$otherUserId"
+        val notificationId = otherUserId.hashCode()
+
+        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(messageBody)
+            .setAutoCancel(true)
+            .setSound(defaultSoundUri)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup(groupKey) // Grupiraj po korisniku
+            .setWhen(System.currentTimeMillis())
+
+        val notificationManager =
+            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Nove Poruke",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        // Prikaži notifikaciju s istim ID za istog korisnika (zamijenit će prethodnu)
+        notificationManager.notify(notificationId, notificationBuilder.build())
+
+        Log.d(TAG, "Notification sent with ID: $notificationId, Group: $groupKey")
+    }
+
 
 }

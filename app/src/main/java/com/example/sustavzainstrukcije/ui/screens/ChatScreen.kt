@@ -1,9 +1,11 @@
 package com.example.sustavzainstrukcije.ui.screens
 
+import android.app.NotificationManager
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,9 +14,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.sustavzainstrukcije.services.MyFirebaseMessagingService
 import com.example.sustavzainstrukcije.ui.data.Message
 import com.example.sustavzainstrukcije.ui.viewmodels.ChatViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.UserViewModel
@@ -34,6 +40,22 @@ fun ChatScreen(
     userViewModel: UserViewModel = viewModel(),
     chatViewModel: ChatViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+
+    DisposableEffect(chatId) {
+        MyFirebaseMessagingService.currentActiveChatId = chatId
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(otherUserId.hashCode())
+
+        MyFirebaseMessagingService.clearMessagesForUser(otherUserId)
+
+        onDispose {
+            MyFirebaseMessagingService.currentActiveChatId = null
+            Log.d("ChatScreen", "Cleared active chat")
+        }
+    }
+
     val currentUser = Firebase.auth.currentUser
     val otherUserDetails by userViewModel.getUserById(otherUserId).collectAsState(initial = null)
 
@@ -44,10 +66,10 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(chatId, currentUser?.uid) {
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         currentUser?.uid?.let { currentUserId ->
             if (currentUserId.isNotEmpty() && chatId.isNotEmpty()) {
-                Log.d("ChatScreen", "Attempting to mark messages as read for chat: $chatId by user: $currentUserId")
+                Log.d("ChatScreen", "Marking messages as read on resume for chat: $chatId")
                 chatViewModel.markMessagesAsRead(chatId, currentUserId)
             }
         }
@@ -70,13 +92,14 @@ fun ChatScreen(
 
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)
+            contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            itemsIndexed(messages) { _, message ->
+            items(
+                items = messages,
+                key = { message -> "${message.timestamp}_${message.senderId}_${message.text.hashCode()}" }
+            ) { message ->
                 val lastSentMessageByCurrentUser = messages.lastOrNull { it.senderId == currentUser?.uid }
                 val isTheVeryLastMessageByCurrentUserAndRead = lastSentMessageByCurrentUser == message && message.readBy[message.receiverId] == true
 
@@ -117,7 +140,7 @@ fun ChatScreen(
                                 senderId = currentUser.uid,
                                 receiverId = otherUserId,
                                 timestamp = System.currentTimeMillis()
-                            )
+                            ),
                         )
                         newMessage = ""
                     }
