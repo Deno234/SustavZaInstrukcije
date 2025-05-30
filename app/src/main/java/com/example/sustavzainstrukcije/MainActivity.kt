@@ -47,18 +47,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             SustavZaInstrukcijeTheme {
                 appNavController = rememberNavController()
+
                 LaunchedEffect(appNavController) {
-                    viewModel.setNavController(appNavController)
+                    viewModel.checkAuthState()
                 }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     NavGraph(
                         navController = appNavController,
+                        authViewModel = viewModel,
                         onGoogleSignIn = {
                             viewModel.initiateGoogleSignIn { request ->
                                 lifecycleScope.launch {

@@ -1,8 +1,15 @@
 package com.example.sustavzainstrukcije.ui.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import com.example.sustavzainstrukcije.ui.screens.MessagesScreen
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -16,14 +23,35 @@ import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
+import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
 @Composable
 fun NavGraph(
     navController: NavHostController = rememberNavController(),
+    authViewModel: AuthViewModel,
     onGoogleSignIn: () -> Unit,
     onGoogleRegistrationComplete: () -> Unit
 ) {
-    NavHost(navController = navController, startDestination = "main") {
+
+    val isAuthenticated by authViewModel.isAuthenticated.collectAsState()
+
+    val startDestination = when (isAuthenticated) {
+        true -> "home"
+        false -> "main"
+        null -> "loading"
+    }
+
+    NavHost(navController = navController, startDestination = startDestination) {
+
+        composable("loading") {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
         composable("main") {
             MainScreen(
                 onLoginClick = { navController.navigate("login") },
@@ -47,7 +75,7 @@ fun NavGraph(
             )
         }
         composable("home") {
-            HomeScreen(navController)
+            HomeScreen(navController, authViewModel)
         }
 
         composable("profile") {

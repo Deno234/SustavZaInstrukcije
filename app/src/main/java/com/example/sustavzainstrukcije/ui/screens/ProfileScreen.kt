@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -105,6 +106,16 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Save Changes")
+        }
+
+        Button(
+            onClick = { authViewModel.signOut() },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error
+            )
+        ) {
+            Text("Sign Out", color = MaterialTheme.colorScheme.onError)
         }
     }
 }

@@ -30,6 +30,10 @@ import kotlinx.coroutines.launch
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
+
+    private val _isAuthenticated = MutableStateFlow<Boolean?>(null) // null = checking, true = authenticated, false = not authenticated
+    val isAuthenticated: StateFlow<Boolean?> = _isAuthenticated.asStateFlow()
+
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
@@ -46,12 +50,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     var currentUserId: String? = auth.currentUser?.uid
         private set
-
-    private var navController: NavController? = null
-
-    fun setNavController(controller: NavController) {
-        navController = controller
-    }
 
     fun initiateGoogleSignIn(launcher: (GetCredentialRequest) -> Unit) {
         _loadingState.value = true
@@ -129,10 +127,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         _userData.value = document.toObject(User::class.java)?.copy(id = userId)
                         Log.d(TAG, "User $userId exists in Firestore. UserData: ${_userData.value}")
                         updateFcmToken()
-                        navigateTo("home")
+                        _isAuthenticated.value = true // Promijeni stanje umjesto navigacije
                     } else {
                         Log.d(TAG, "User $userId does not exist in Firestore.")
-                        navigateTo("googleRegistration")
+                        _isAuthenticated.value = false // Korisnik treba dovršiti registraciju
                     }
                 }
             }
@@ -153,20 +151,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         Log.e(TAG, errorMessage, exception)
         viewModelScope.launch {
             _errorMessage.emit(errorMessage)
-        }
-    }
-
-    private fun navigateTo(destination: String) {
-        if (navController == null) {
-            Log.e(TAG, "NavController not set in AuthViewModel. Cannot navigate to $destination.")
-            return
-        }
-        Log.d(TAG, "Navigating to: $destination")
-        navController?.navigate(destination) {
-            if (destination == "home") {
-                popUpTo(navController?.graph?.startDestinationId ?: 0) { inclusive = true }
-                launchSingleTop = true
-            }
         }
     }
 
@@ -258,35 +242,38 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun completeGoogleRegistration(userId: String, name: String, email: String, role: String /* ... ostali podaci */) {
-        if (userId.isEmpty()) {
-            Log.e(TAG, "Cannot complete registration: userId is empty.")
-            viewModelScope.launch { _errorMessage.emit("ID korisnika nedostaje.") }
-            return
+    fun checkAuthState() {
+        val currentFirebaseUser = auth.currentUser
+        if (currentFirebaseUser != null) {
+            this.currentUserId = currentFirebaseUser.uid
+            Log.d(TAG, "User already authenticated: ${this.currentUserId}")
+            fetchCurrentUserData()
+            _isAuthenticated.value = true
+        } else {
+            Log.d(TAG, "No authenticated user found")
+            _isAuthenticated.value = false
         }
-        val user = User(
-            id = userId,
-            name = name,
-            email = email,
-            role = role
-        )
-        _loadingState.value = true
-        db.collection("users").document(userId).set(user)
-            .addOnSuccessListener {
-                _loadingState.value = false
-                Log.d(TAG, "User document created/updated for $userId after Google registration.")
-                _userData.value = user
-                this.currentUserId = userId
-                updateFcmToken()
-                navigateTo("home")
-            }
-            .addOnFailureListener { e ->
-                _loadingState.value = false
-                Log.e(TAG, "Error creating/updating user document for $userId after Google registration.", e)
-                viewModelScope.launch { _errorMessage.emit("Greška pri spremanju podataka.") }
-            }
     }
 
+    fun signOut() {
+        val userId = this.currentUserId
+        if (userId != null) {
+            db.collection("users").document(userId)
+                .update("fcmToken", null)
+                .addOnSuccessListener {
+                    Log.d(TAG, "FCM token removed for user $userId")
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Error removing FCM token", e)
+                }
+        }
+
+        auth.signOut()
+        this.currentUserId = null
+        _userData.value = null
+        _isAuthenticated.value = false
+        Log.d(TAG, "User signed out successfully")
+    }
 
     companion object {
         private const val TAG = "AuthViewModel"
