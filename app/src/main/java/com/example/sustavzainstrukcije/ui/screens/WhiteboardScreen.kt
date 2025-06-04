@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,7 +96,6 @@ fun WhiteboardScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar s page navigation
         TopAppBar(
             title = {
                 Text("Whiteboard - Stranica ${currentPage?.pageNumber ?: 1} od ${allPages.size}")
@@ -190,11 +190,22 @@ fun WhiteboardScreen(
             Text("${strokeWidth.toInt()}px")
         }
 
-        // Canvas (postojeći kod ostaje isti)
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val singlePoint = listOf(Point(offset.x, offset.y))
+                            whiteboardViewModel.addStroke(
+                                points = singlePoint,
+                                color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                                strokeWidth = strokeWidth
+                            )
+                        }
+                    )
+                }
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { offset ->
@@ -220,28 +231,40 @@ fun WhiteboardScreen(
                     )
                 }
         ) {
-            // Crtaj postojeće stroke-ove
             strokes.forEach { stroke ->
                 if (stroke.points.isNotEmpty()) {
-                    val path = Path()
-                    path.moveTo(stroke.points.first().x, stroke.points.first().y)
-                    stroke.points.drop(1).forEach { point ->
-                        path.lineTo(point.x, point.y)
-                    }
+                    val color = Color(android.graphics.Color.parseColor(stroke.color))
 
-                    drawPath(
-                        path = path,
-                        color = Color(android.graphics.Color.parseColor(stroke.color)),
-                        style = Stroke(
-                            width = stroke.strokeWidth,
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
+                    if (stroke.points.size == 1) {
+                        // Crtanje točke kao krug
+                        val point = stroke.points.first()
+                        drawCircle(
+                            color = color,
+                            radius = stroke.strokeWidth / 2f,
+                            center = androidx.compose.ui.geometry.Offset(point.x, point.y)
                         )
-                    )
+                    } else {
+                        // Crtanje linije kao path
+                        val path = Path()
+                        path.moveTo(stroke.points.first().x, stroke.points.first().y)
+                        stroke.points.drop(1).forEach { point ->
+                            path.lineTo(point.x, point.y)
+                        }
+
+                        drawPath(
+                            path = path,
+                            color = color,
+                            style = Stroke(
+                                width = stroke.strokeWidth,
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
+                    }
                 }
             }
 
-            // Crtaj trenutni stroke
+            // Crtanje trenutnog stroke-a (drag)
             if (currentPoints.isNotEmpty()) {
                 drawPath(
                     path = currentPath,
@@ -254,9 +277,9 @@ fun WhiteboardScreen(
                 )
             }
         }
+
     }
 
-    // Color Picker Dialog (postojeći kod)
     if (showColorPicker) {
         ColorPickerDialog(
             onColorSelected = { color ->
