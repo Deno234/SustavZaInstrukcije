@@ -265,6 +265,7 @@ class WhiteboardViewModel : ViewModel() {
 
     fun findStrokeAtPosition(x: Float, y: Float): DrawingStroke? {
         return _strokes.value.firstOrNull { stroke ->
+            if (stroke.color == "#FFFFFF") return@firstOrNull false
             stroke.points.any { point ->
                 val distanceX = x - point.x
                 val distanceY = y - point.y
@@ -272,6 +273,7 @@ class WhiteboardViewModel : ViewModel() {
             }
         }
     }
+
 
     override fun onCleared() {
         super.onCleared()

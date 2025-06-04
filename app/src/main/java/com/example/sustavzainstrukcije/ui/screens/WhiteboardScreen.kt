@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -61,6 +62,7 @@ import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import androidx.core.graphics.toColorInt
+import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,8 +87,7 @@ fun WhiteboardScreen(
     val eraserMode by whiteboardViewModel.eraseMode.collectAsState()
     val eraserWidth by whiteboardViewModel.eraserSize.collectAsState()
 
-    val colorToUse = if (isEraser && eraserMode == EraseMode.COLOR) Color.White else selectedColor
-    val widthToUse = if (isEraser && eraserMode == EraseMode.COLOR) eraserWidth else strokeWidth
+    val colorToUse = if (isEraser) Color.White else selectedColor
 
     var showEraserSizePopup by remember { mutableStateOf(false) }
     var localEraserWidth by remember { mutableStateOf(eraserWidth) }
@@ -115,7 +116,6 @@ fun WhiteboardScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // 1. TopAppBar s naslovom i back gumbom
         TopAppBar(
             title = {
                 Text("Whiteboard - Stranica ${currentPage?.pageNumber ?: 1} od ${allPages.size}")
@@ -217,14 +217,14 @@ fun WhiteboardScreen(
                 // Gumica
                 IconButton(onClick = { showEraseModePopup = true }) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_edit), // Ikona za mod
+                        painter = painterResource(R.drawable.ic_edit),
                         contentDescription = "Odaberi način gumice"
                     )
                 }
 
                 IconButton(onClick = { showEraserSizePopup = true }) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_tune), // Dodaj ikonu (ili koristi bilo koju)
+                        painter = painterResource(R.drawable.ic_tune),
                         contentDescription = "Postavi veličinu gumice"
                     )
                 }
@@ -246,22 +246,29 @@ fun WhiteboardScreen(
         // 4. Canvas za crtanje
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .background(Color.White)
         ) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
+                    .clipToBounds()
                     .background(Color.White)
                     .pointerInput(isEraser, eraserMode, strokes) {
                         detectTapGestures { offset ->
+                            if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height) {
+                                return@detectTapGestures
+                            }
                             if (isEraser && eraserMode == EraseMode.STROKE) {
                                 // Pronađi i obriši stroke na toj poziciji
                                 val strokeToRemove = strokes.lastOrNull { stroke ->
+                                    // Preskoči stroke-ove koji su bijeli (gumica bojom)
+                                    if (stroke.color == "#FFFFFF") return@lastOrNull false
                                     stroke.points.any { point ->
                                         val dx = point.x - offset.x
                                         val dy = point.y - offset.y
-                                        kotlin.math.sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                        sqrt(dx * dx + dy * dy) < eraserWidth / 2
                                     }
                                 }
                                 strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
@@ -279,51 +286,72 @@ fun WhiteboardScreen(
                     .pointerInput(isEraser, eraserMode) {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                if (isEraser && eraserMode == EraseMode.STROKE) return@detectDragGestures
+                                if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height) {
+                                    return@detectDragGestures
+                                }
+                                if (isEraser && eraserMode == EraseMode.STROKE) return@detectDragGestures // Preskoči za stroke gumicu
                                 currentPath = Path().apply { moveTo(offset.x, offset.y) }
                                 currentPoints = listOf(Point(offset.x, offset.y))
                             },
                             onDrag = { change, _ ->
                                 val newPoint = Point(change.position.x, change.position.y)
-                                currentPoints = currentPoints + newPoint
-                                currentPath.lineTo(newPoint.x, newPoint.y)
 
-                                if (isEraser && eraserMode == EraseMode.COLOR) {
-                                    whiteboardViewModel.addStroke(
-                                        points = listOf(newPoint),
-                                        color = "#FFFFFF",
-                                        strokeWidth = eraserWidth
-                                    )
-                                    currentPoints = emptyList()
-                                    currentPath = Path()
-                                } else if (isEraser && eraserMode == EraseMode.STROKE) {
-                                    val strokeToRemove = strokes.lastOrNull { stroke ->
-                                        stroke.points.any { point ->
-                                            val dx = point.x - newPoint.x
-                                            val dy = point.y - newPoint.y
-                                            kotlin.math.sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                when {
+                                    isEraser && eraserMode == EraseMode.STROKE -> {
+                                        val strokeToRemove = strokes.lastOrNull { stroke ->
+                                            if (stroke.color == "#FFFFFF") return@lastOrNull false
+                                            stroke.points.any { point ->
+                                                val dx = point.x - newPoint.x
+                                                val dy = point.y - newPoint.y
+                                                sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                            }
                                         }
+                                        strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
                                     }
-                                    strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
+
+                                    isEraser && eraserMode == EraseMode.COLOR -> {
+                                        currentPoints = currentPoints + newPoint
+                                        currentPath.lineTo(newPoint.x, newPoint.y)
+                                    }
+
+                                    else -> {
+                                        currentPoints = currentPoints + newPoint
+                                        currentPath.lineTo(newPoint.x, newPoint.y)
+                                    }
                                 }
-                            }
-                            ,
+                            },
+
                             onDragEnd = {
-                                if (!isEraser) {
-                                    if (currentPoints.isNotEmpty()) {
+                                if (currentPoints.isNotEmpty()) {
+                                    if (!isEraser || eraserMode == EraseMode.COLOR) {
+                                        val strokeColor = if (isEraser) {
+                                            String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
+                                        } else {
+                                            String.format("#%06X", colorToUse.toArgb() and 0xFFFFFF)
+                                        }
+
+                                        val strokeWidthToUse = if (isEraser) {
+                                            eraserWidth
+                                        } else {
+                                            strokeWidth
+                                        }
+
                                         whiteboardViewModel.addStroke(
                                             points = currentPoints,
-                                            color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
-                                            strokeWidth = strokeWidth
+                                            color = strokeColor,
+                                            strokeWidth = strokeWidthToUse
                                         )
                                     }
                                 }
+
                                 currentPoints = emptyList()
                                 currentPath = Path()
                             }
 
+
                         )
                     }
+
             ) {
                 strokes.forEach { stroke ->
                     if (stroke.points.isNotEmpty()) {
@@ -373,12 +401,12 @@ fun WhiteboardScreen(
                     )
                 }
 
-                if (currentPoints.isNotEmpty() && (!isEraser || eraserMode != EraseMode.COLOR)) {
+                if (currentPoints.isNotEmpty() && (!isEraser || eraserMode != EraseMode.STROKE)) {
                     drawPath(
                         path = currentPath,
-                        color = selectedColor,
+                        color = colorToUse,
                         style = Stroke(
-                            width = strokeWidth,
+                            width = if (isEraser) eraserWidth else strokeWidth,
                             cap = StrokeCap.Round,
                             join = StrokeJoin.Round
                         )
