@@ -54,6 +54,13 @@ fun HomeScreenStudent(navController: NavHostController, userId: String?, authVie
         }
 
         Button(
+            onClick = { navController.navigate("student_sessions") },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("My Sessions")
+        }
+
+        Button(
             onClick = { authViewModel.signOut() },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(

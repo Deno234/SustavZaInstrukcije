@@ -16,13 +16,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.sustavzainstrukcije.ui.screens.ChatScreen
 import com.example.sustavzainstrukcije.ui.screens.CheckProfileScreen
+import com.example.sustavzainstrukcije.ui.screens.CreateSessionScreen
 import com.example.sustavzainstrukcije.ui.screens.FindInstructorsScreen
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
+import com.example.sustavzainstrukcije.ui.screens.InstructorSessionsScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
+import com.example.sustavzainstrukcije.ui.screens.StudentSessionsScreen
+import com.example.sustavzainstrukcije.ui.screens.WhiteboardScreen
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
 @Composable
@@ -109,6 +113,30 @@ fun NavGraph(
 
         composable("findInstructorsScreen") {
             FindInstructorsScreen(navController)
+        }
+
+        composable("create_session") {
+            CreateSessionScreen(navController)
+        }
+
+        composable("instructor_sessions") {
+            InstructorSessionsScreen(navController)
+        }
+
+        composable("student_sessions") {
+            StudentSessionsScreen(navController)
+        }
+
+        composable("whiteboard/{sessionId}") { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
+            if (sessionId.isNotEmpty()) {
+                WhiteboardScreen(
+                    sessionId = sessionId,
+                    navController = navController
+                )
+            } else {
+                Text("Greška: Session ID nedostaje.")
+            }
         }
 
         /*
