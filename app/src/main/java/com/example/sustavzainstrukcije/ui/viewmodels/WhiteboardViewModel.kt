@@ -3,6 +3,7 @@ package com.example.sustavzainstrukcije.ui.viewmodels
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.sustavzainstrukcije.ui.data.DrawingStroke
+import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.WhiteboardPage
 import com.google.firebase.Firebase
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
+import kotlin.math.hypot
 
 class WhiteboardViewModel : ViewModel() {
     private val db = Firebase.database
@@ -37,6 +39,16 @@ class WhiteboardViewModel : ViewModel() {
     private val _currentPageIndex = MutableStateFlow(0)
     val currentPageIndex: StateFlow<Int> = _currentPageIndex.asStateFlow()
 
+    private val _isEraserActive = MutableStateFlow(false)
+    val isEraserActive: StateFlow<Boolean> = _isEraserActive.asStateFlow()
+
+    private val _eraseMode = MutableStateFlow(EraseMode.COLOR) // "color" ili "stroke"
+    val eraseMode: StateFlow<EraseMode> = _eraseMode.asStateFlow()
+
+    private val _eraserSize = MutableStateFlow(32f)
+    val eraserSize: StateFlow<Float> = _eraserSize.asStateFlow()
+    fun setEraserSize(size: Float) { _eraserSize.value = size }
+
     fun initializeWhiteboard(sessionId: String) {
         if (initializedSessions.contains(sessionId)) {
             Log.d("WhiteboardViewModel", "Already initialized for session: $sessionId")
@@ -46,7 +58,6 @@ class WhiteboardViewModel : ViewModel() {
         initializedSessions.add(sessionId)
         Log.d("WhiteboardViewModel", "Initializing whiteboard for session: $sessionId")
 
-        // Sluši sve stranice za ovaj session
         listenToAllPages(sessionId)
     }
 
@@ -118,7 +129,6 @@ class WhiteboardViewModel : ViewModel() {
 
         strokesListener = firestore.collection("drawing_strokes")
             .whereEqualTo("pageId", pageId)
-            // UKLONI orderBy privremeno da testiraš
             // .orderBy("timestamp")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
@@ -153,7 +163,7 @@ class WhiteboardViewModel : ViewModel() {
                         Log.e("WhiteboardViewModel", "Error parsing stroke: ${e.message}", e)
                         null
                     }
-                }?.sortedBy { it.timestamp } ?: emptyList() // Sortiraj u kodu
+                }?.sortedBy { it.timestamp } ?: emptyList()
 
                 Log.d("WhiteboardViewModel", "Loaded ${strokesList.size} strokes for page: $pageId")
                 _strokes.value = strokesList
@@ -183,7 +193,7 @@ class WhiteboardViewModel : ViewModel() {
             "color" to color,
             "strokeWidth" to strokeWidth,
             "timestamp" to System.currentTimeMillis(),
-            "pageId" to pageId // Dodaj pageId direktno
+            "pageId" to pageId
         )
 
         firestore.collection("drawing_strokes").document(strokeId)
@@ -215,7 +225,7 @@ class WhiteboardViewModel : ViewModel() {
             .set(newPage)
             .addOnSuccessListener {
                 Log.d("WhiteboardViewModel", "New page created: $pageId")
-                // Ne postavljaj trenutnu stranicu ovdje - to će se dogoditi automatski kroz listener
+                // Ne postavlja se trenutna stranicu ovdje - to će se dogoditi automatski kroz listener
             }
             .addOnFailureListener { e ->
                 Log.e("WhiteboardViewModel", "Error creating new page", e)
@@ -237,6 +247,30 @@ class WhiteboardViewModel : ViewModel() {
             .addOnSuccessListener {
                 Log.d("WhiteboardViewModel", "First page created: $pageId")
             }
+    }
+
+    fun toggleEraser() {
+        _isEraserActive.value = !_isEraserActive.value
+        if (_isEraserActive.value) _eraseMode.value = EraseMode.COLOR
+    }
+
+    fun setEraseMode(mode: EraseMode) {
+        _eraseMode.value = mode
+    }
+
+    fun removeStroke(strokeId: String) {
+        _strokes.value = _strokes.value.filter { it.id != strokeId }
+        firestore.collection("drawing_strokes").document(strokeId).delete()
+    }
+
+    fun findStrokeAtPosition(x: Float, y: Float): DrawingStroke? {
+        return _strokes.value.firstOrNull { stroke ->
+            stroke.points.any { point ->
+                val distanceX = x - point.x
+                val distanceY = y - point.y
+                hypot(distanceX, distanceY) < stroke.strokeWidth * 2
+            }
+        }
     }
 
     override fun onCleared() {

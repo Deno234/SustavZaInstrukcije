@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -50,11 +52,15 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.example.sustavzainstrukcije.R
+import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
+import androidx.core.graphics.toColorInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +80,17 @@ fun WhiteboardScreen(
     var selectedColor by remember { mutableStateOf(Color.Black) }
     var strokeWidth by remember { mutableStateOf(5f) }
     var showColorPicker by remember { mutableStateOf(false) }
+
+    val isEraser by whiteboardViewModel.isEraserActive.collectAsState()
+    val eraserMode by whiteboardViewModel.eraseMode.collectAsState()
+    val eraserWidth by whiteboardViewModel.eraserSize.collectAsState()
+
+    val colorToUse = if (isEraser && eraserMode == EraseMode.COLOR) Color.White else selectedColor
+    val widthToUse = if (isEraser && eraserMode == EraseMode.COLOR) eraserWidth else strokeWidth
+
+    var showEraserSizePopup by remember { mutableStateOf(false) }
+    var localEraserWidth by remember { mutableStateOf(eraserWidth) }
+    var showEraseModePopup by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -95,7 +112,10 @@ fun WhiteboardScreen(
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // 1. TopAppBar s naslovom i back gumbom
         TopAppBar(
             title = {
                 Text("Whiteboard - Stranica ${currentPage?.pageNumber ?: 1} od ${allPages.size}")
@@ -107,7 +127,7 @@ fun WhiteboardScreen(
             }
         )
 
-        // Page Navigation Bar
+        // 2. Navigacija kroz stranice
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -115,7 +135,6 @@ fun WhiteboardScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Previous Page Button
             IconButton(
                 onClick = { whiteboardViewModel.navigateToPreviousPage() },
                 enabled = currentPageIndex > 0
@@ -123,7 +142,6 @@ fun WhiteboardScreen(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Prethodna stranica")
             }
 
-            // Page Indicators
             LazyRow(
                 modifier = Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -135,8 +153,6 @@ fun WhiteboardScreen(
                         onClick = { whiteboardViewModel.setCurrentPage(index) }
                     )
                 }
-
-                // Add New Page Button (samo na zadnjoj stranici)
                 if (allPages.isNotEmpty() && currentPageIndex == allPages.size - 1) {
                     item {
                         IconButton(
@@ -153,7 +169,6 @@ fun WhiteboardScreen(
                 }
             }
 
-            // Next Page Button
             IconButton(
                 onClick = { whiteboardViewModel.navigateToNextPage() },
                 enabled = currentPageIndex < allPages.size - 1
@@ -162,7 +177,7 @@ fun WhiteboardScreen(
             }
         }
 
-        // Drawing Tools (postojeći kod)
+        // 3. Alati za crtanje
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,125 +185,263 @@ fun WhiteboardScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Color Picker Button
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(selectedColor)
-                    .clickable { showColorPicker = true }
-            )
+            // Pisanje
+            if (!isEraser) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(selectedColor)
+                        .clickable { showColorPicker = true }
+                )
+                Text("Debljina:", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = strokeWidth,
+                    onValueChange = { strokeWidth = it },
+                    valueRange = 1f..20f,
+                    modifier = Modifier.weight(1f)
+                )
+                Text("${strokeWidth.toInt()}px")
 
-            // Stroke Width Slider
-            Text("Debljina:")
-            Slider(
-                value = strokeWidth,
-                onValueChange = { strokeWidth = it },
-                valueRange = 1f..20f,
-                modifier = Modifier.weight(1f)
-            )
-            Text("${strokeWidth.toInt()}px")
+                IconButton(
+                    onClick = { whiteboardViewModel.toggleEraser() },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_eraser),
+                        contentDescription = "Gumica",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            } else {
+                // Gumica
+                IconButton(onClick = { showEraseModePopup = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_edit), // Ikona za mod
+                        contentDescription = "Odaberi način gumice"
+                    )
+                }
+
+                IconButton(onClick = { showEraserSizePopup = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tune), // Dodaj ikonu (ili koristi bilo koju)
+                        contentDescription = "Postavi veličinu gumice"
+                    )
+                }
+
+                IconButton(
+                    onClick = { whiteboardViewModel.toggleEraser() },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_eraser),
+                        contentDescription = "Natrag na pisanje",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
 
-        Canvas(
+
+        // 4. Canvas za crtanje
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val singlePoint = listOf(Point(offset.x, offset.y))
-                            whiteboardViewModel.addStroke(
-                                points = singlePoint,
-                                color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
-                                strokeWidth = strokeWidth
-                            )
-                        }
-                    )
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            currentPath = Path().apply { moveTo(offset.x, offset.y) }
-                            currentPoints = listOf(Point(offset.x, offset.y))
-                        },
-                        onDrag = { change, _ ->
-                            val newPoint = Point(change.position.x, change.position.y)
-                            currentPoints = currentPoints + newPoint
-                            currentPath.lineTo(change.position.x, change.position.y)
-                        },
-                        onDragEnd = {
-                            if (currentPoints.isNotEmpty()) {
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White)
+                    .pointerInput(isEraser, eraserMode, strokes) {
+                        detectTapGestures { offset ->
+                            if (isEraser && eraserMode == EraseMode.STROKE) {
+                                // Pronađi i obriši stroke na toj poziciji
+                                val strokeToRemove = strokes.lastOrNull { stroke ->
+                                    stroke.points.any { point ->
+                                        val dx = point.x - offset.x
+                                        val dy = point.y - offset.y
+                                        kotlin.math.sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                    }
+                                }
+                                strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
+                            } else if (!isEraser) {
+                                // Normalni tap za crtanje točke
+                                val singlePoint = listOf(Point(offset.x, offset.y))
                                 whiteboardViewModel.addStroke(
-                                    points = currentPoints,
+                                    points = singlePoint,
                                     color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
                                     strokeWidth = strokeWidth
                                 )
                             }
-                            currentPoints = emptyList()
-                            currentPath = Path()
                         }
-                    )
-                }
-        ) {
-            strokes.forEach { stroke ->
-                if (stroke.points.isNotEmpty()) {
-                    val color = Color(android.graphics.Color.parseColor(stroke.color))
-
-                    if (stroke.points.size == 1) {
-                        // Crtanje točke kao krug
-                        val point = stroke.points.first()
-                        drawCircle(
-                            color = color,
-                            radius = stroke.strokeWidth / 2f,
-                            center = androidx.compose.ui.geometry.Offset(point.x, point.y)
-                        )
-                    } else {
-                        // Crtanje linije kao path
-                        val path = Path()
-                        path.moveTo(stroke.points.first().x, stroke.points.first().y)
-                        stroke.points.drop(1).forEach { point ->
-                            path.lineTo(point.x, point.y)
-                        }
-
-                        drawPath(
-                            path = path,
-                            color = color,
-                            style = Stroke(
-                                width = stroke.strokeWidth,
-                                cap = StrokeCap.Round,
-                                join = StrokeJoin.Round
-                            )
+                    }
+                    .pointerInput(isEraser, eraserMode) {
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                if (isEraser && eraserMode == EraseMode.STROKE) return@detectDragGestures
+                                currentPath = Path().apply { moveTo(offset.x, offset.y) }
+                                currentPoints = listOf(Point(offset.x, offset.y))
+                            },
+                            onDrag = { change, _ ->
+                                if (isEraser && eraserMode == EraseMode.STROKE) {
+                                    // Brisanje stroke-ova dok vučeš prst
+                                    val strokeToRemove = strokes.lastOrNull { stroke ->
+                                        stroke.points.any { point ->
+                                            val dx = point.x - change.position.x
+                                            val dy = point.y - change.position.y
+                                            kotlin.math.sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                        }
+                                    }
+                                    strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
+                                } else {
+                                    val newPoint = Point(change.position.x, change.position.y)
+                                    currentPoints = currentPoints + newPoint
+                                    currentPath.lineTo(change.position.x, change.position.y)
+                                }
+                            },
+                            onDragEnd = {
+                                if (!isEraser || eraserMode == EraseMode.COLOR) {
+                                    if (currentPoints.isNotEmpty()) {
+                                        whiteboardViewModel.addStroke(
+                                            points = currentPoints,
+                                            color = if (isEraser && eraserMode == EraseMode.COLOR) "#FFFFFF"
+                                            else String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                                            strokeWidth = if (isEraser && eraserMode == EraseMode.COLOR) eraserWidth else strokeWidth
+                                        )
+                                    }
+                                }
+                                currentPoints = emptyList()
+                                currentPath = Path()
+                            }
                         )
                     }
+            ) {
+                strokes.forEach { stroke ->
+                    if (stroke.points.isNotEmpty()) {
+                        val color = Color(stroke.color.toColorInt())
+                        if (stroke.points.size == 1) {
+                            val point = stroke.points.first()
+                            drawCircle(
+                                color = color,
+                                radius = stroke.strokeWidth / 2f,
+                                center = Offset(point.x, point.y)
+                            )
+                        } else {
+                            val path = Path()
+                            path.moveTo(stroke.points.first().x, stroke.points.first().y)
+                            stroke.points.drop(1).forEach { point ->
+                                path.lineTo(point.x, point.y)
+                            }
+                            drawPath(
+                                path = path,
+                                color = color,
+                                style = Stroke(
+                                    width = stroke.strokeWidth,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
+                    }
                 }
-            }
 
-            // Crtanje trenutnog stroke-a (drag)
-            if (currentPoints.isNotEmpty()) {
-                drawPath(
-                    path = currentPath,
-                    color = selectedColor,
-                    style = Stroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
+                if (isEraser && currentPoints.isNotEmpty()) {
+                    val lastPoint = currentPoints.last()
+
+                    // Ispuna: blago bijela (transparentna)
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.6f),
+                        radius = eraserWidth / 2f,
+                        center = Offset(lastPoint.x, lastPoint.y)
                     )
-                )
+
+                    // Obrub: svijetlo siva za kontrast
+                    drawCircle(
+                        color = Color.Gray,
+                        radius = eraserWidth / 2f,
+                        center = Offset(lastPoint.x, lastPoint.y),
+                        style = Stroke(width = 2f)
+                    )
+                }
+
+                if (currentPoints.isNotEmpty() && (!isEraser || eraserMode != EraseMode.COLOR)) {
+                    drawPath(
+                        path = currentPath,
+                        color = selectedColor,
+                        style = Stroke(
+                            width = strokeWidth,
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                }
+
             }
+        }
+
+        // 5. Color picker dijalog
+        if (showColorPicker) {
+            ColorPickerDialog(
+                onColorSelected = { color ->
+                    selectedColor = color
+                    showColorPicker = false
+                },
+                onDismiss = { showColorPicker = false }
+            )
+        }
+
+        if (showEraserSizePopup) {
+            AlertDialog(
+                onDismissRequest = { showEraserSizePopup = false },
+                title = { Text("Veličina gumice") },
+                text = {
+                    Column {
+                        Slider(
+                            value = localEraserWidth,
+                            onValueChange = { localEraserWidth = it },
+                            valueRange = 8f..100f
+                        )
+                        Text("Trenutna veličina: ${localEraserWidth.toInt()}px")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        whiteboardViewModel.setEraserSize(localEraserWidth)
+                        showEraserSizePopup = false
+                    }) {
+                        Text("Gotovo")
+                    }
+                }
+            )
+        }
+
+        if (showEraseModePopup) {
+            AlertDialog(
+                onDismissRequest = { showEraseModePopup = false },
+                title = { Text("Način gumice") },
+                text = {
+                    Column {
+                        TextButton(onClick = {
+                            whiteboardViewModel.setEraseMode(EraseMode.COLOR)
+                            showEraseModePopup = false
+                        }) { Text("Boja") }
+                        TextButton(onClick = {
+                            whiteboardViewModel.setEraseMode(EraseMode.STROKE)
+                            showEraseModePopup = false
+                        }) { Text("Stroke") }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showEraseModePopup = false }) {
+                        Text("Zatvori")
+                    }
+                }
+            )
         }
 
     }
 
-    if (showColorPicker) {
-        ColorPickerDialog(
-            onColorSelected = { color ->
-                selectedColor = color
-                showColorPicker = false
-            },
-            onDismiss = { showColorPicker = false }
-        )
-    }
 }
 
 @Composable
