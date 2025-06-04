@@ -46,64 +46,70 @@ class WhiteboardViewModel : ViewModel() {
         initializedSessions.add(sessionId)
         Log.d("WhiteboardViewModel", "Initializing whiteboard for session: $sessionId")
 
-        firestore.collection("whiteboard_pages")
-            .whereEqualTo("sessionId", sessionId)
-            .orderBy("pageNumber", com.google.firebase.firestore.Query.Direction.DESCENDING)
-            .limit(1)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                Log.d("WhiteboardViewModel", "Query result: ${snapshot.size()} documents found")
+        // Sluši sve stranice za ovaj session
+        listenToAllPages(sessionId)
+    }
 
-                if (snapshot.isEmpty) {
-                    Log.d("WhiteboardViewModel", "No pages found at all, creating new one")
+    private fun listenToAllPages(sessionId: String) {
+        pagesListener?.remove()
+
+        pagesListener = firestore.collection("whiteboard_pages")
+            .whereEqualTo("sessionId", sessionId)
+            .orderBy("pageNumber")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("WhiteboardViewModel", "Error listening to pages", e)
+                    return@addSnapshotListener
+                }
+
+                val pagesList = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(WhiteboardPage::class.java)?.copy(id = doc.id)
+                }?.sortedBy { it.pageNumber } ?: emptyList()
+
+                Log.d("WhiteboardViewModel", "Loaded ${pagesList.size} pages")
+                _allPages.value = pagesList
+
+                // Ako nema stranica, kreiraj prvu
+                if (pagesList.isEmpty()) {
                     createNewPage(sessionId)
                 } else {
-                    val pageDoc = snapshot.documents.first()
-                    val page = pageDoc.toObject(WhiteboardPage::class.java)?.copy(id = pageDoc.id)
-
-                    if (page != null) {
-                        // Ako stranica nije aktivna, ponovno je aktiviraj
-                        if (page.isActive != true) {
-                            firestore.collection("whiteboard_pages").document(page.id)
-                                .update("isActive", true)
-                                .addOnSuccessListener {
-                                    Log.d("WhiteboardViewModel", "Reactivated existing page: ${page.id}")
-                                }
-                        }
-
-                        _currentPage.value = page
-                        Log.d("WhiteboardViewModel", "Using page: ${page.id}")
-                        listenToStrokes(page.id)
-                    } else {
-                        Log.e("WhiteboardViewModel", "Page data is null, creating new page")
-                        createNewPage(sessionId)
+                    // Postavi trenutnu stranicu na prvu ako nije postavljena
+                    if (_currentPage.value == null) {
+                        setCurrentPage(0)
                     }
                 }
             }
-            .addOnFailureListener { e ->
-                Log.e("WhiteboardViewModel", "Error initializing whiteboard", e)
-                initializedSessions.remove(sessionId)
-            }
     }
 
+    fun setCurrentPage(pageIndex: Int) {
+        val pages = _allPages.value
+        if (pageIndex >= 0 && pageIndex < pages.size) {
+            _currentPageIndex.value = pageIndex
+            val page = pages[pageIndex]
+            _currentPage.value = page
 
+            // Prestani slušati prethodne stroke-ove
+            strokesListener?.remove()
+            listenToStrokes(page.id)
 
+            Log.d("WhiteboardViewModel", "Switched to page ${page.pageNumber}")
+        }
+    }
 
+    fun navigateToNextPage() {
+        val currentIndex = _currentPageIndex.value
+        val totalPages = _allPages.value.size
 
-    private fun createNewPage(sessionId: String) {
-        val pageId = UUID.randomUUID().toString()
-        val page = WhiteboardPage(
-            id = pageId,
-            sessionId = sessionId,
-            pageNumber = 1
-        )
+        if (currentIndex < totalPages - 1) {
+            setCurrentPage(currentIndex + 1)
+        }
+    }
 
-        firestore.collection("whiteboard_pages").document(pageId)
-            .set(page)
-            .addOnSuccessListener {
-                _currentPage.value = page
-                listenToStrokes(pageId)
-            }
+    fun navigateToPreviousPage() {
+        val currentIndex = _currentPageIndex.value
+        if (currentIndex > 0) {
+            setCurrentPage(currentIndex - 1)
+        }
     }
 
     private fun listenToStrokes(pageId: String) {
@@ -193,33 +199,50 @@ class WhiteboardViewModel : ViewModel() {
 
     fun createNewPage() {
         val sessionId = _currentPage.value?.sessionId ?: return
-        val currentPageNumber = _currentPage.value?.pageNumber ?: 0
+        val currentUserId = auth.currentUser?.uid ?: return
+        val pages = _allPages.value
+        val nextPageNumber = (pages.maxOfOrNull { it.pageNumber } ?: 0) + 1
 
-        // Deaktiviraj trenutnu stranicu
-        _currentPage.value?.let { page ->
-            firestore.collection("whiteboard_pages").document(page.id)
-                .update("isActive", false)
-        }
-
-        // Kreiraj novu stranicu
         val pageId = UUID.randomUUID().toString()
         val newPage = WhiteboardPage(
             id = pageId,
             sessionId = sessionId,
-            pageNumber = currentPageNumber + 1
+            pageNumber = nextPageNumber,
+            createdBy = currentUserId
         )
 
         firestore.collection("whiteboard_pages").document(pageId)
             .set(newPage)
             .addOnSuccessListener {
-                _currentPage.value = newPage
-                listenToStrokes(pageId)
+                Log.d("WhiteboardViewModel", "New page created: $pageId")
+                // Ne postavljaj trenutnu stranicu ovdje - to će se dogoditi automatski kroz listener
+            }
+            .addOnFailureListener { e ->
+                Log.e("WhiteboardViewModel", "Error creating new page", e)
+            }
+    }
+
+    private fun createNewPage(sessionId: String) {
+        val currentUserId = auth.currentUser?.uid ?: return
+        val pageId = UUID.randomUUID().toString()
+        val page = WhiteboardPage(
+            id = pageId,
+            sessionId = sessionId,
+            pageNumber = 1,
+            createdBy = currentUserId
+        )
+
+        firestore.collection("whiteboard_pages").document(pageId)
+            .set(page)
+            .addOnSuccessListener {
+                Log.d("WhiteboardViewModel", "First page created: $pageId")
             }
     }
 
     override fun onCleared() {
         super.onCleared()
         strokesListener?.remove()
+        pagesListener?.remove()
         initializedSessions.clear()
     }
 }

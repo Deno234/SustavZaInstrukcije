@@ -4,17 +4,41 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +64,10 @@ fun WhiteboardScreen(
 ) {
     val strokes by whiteboardViewModel.strokes.collectAsState()
     val currentPage by whiteboardViewModel.currentPage.collectAsState()
-    var isLoading by remember { mutableStateOf(true) }
+    val allPages by whiteboardViewModel.allPages.collectAsState()
+    val currentPageIndex by whiteboardViewModel.currentPageIndex.collectAsState()
 
+    var isLoading by remember { mutableStateOf(true) }
     var currentPath by remember { mutableStateOf(Path()) }
     var currentPoints by remember { mutableStateOf(listOf<Point>()) }
     var selectedColor by remember { mutableStateOf(Color.Black) }
@@ -52,8 +78,8 @@ fun WhiteboardScreen(
         whiteboardViewModel.initializeWhiteboard(sessionId)
     }
 
-    LaunchedEffect(currentPage) {
-        if (currentPage != null) {
+    LaunchedEffect(allPages) {
+        if (allPages.isNotEmpty()) {
             isLoading = false
         }
     }
@@ -69,24 +95,74 @@ fun WhiteboardScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar
+        // Top Bar s page navigation
         TopAppBar(
             title = {
-                Text("Whiteboard - Stranica ${currentPage?.pageNumber ?: 1}")
+                Text("Whiteboard - Stranica ${currentPage?.pageNumber ?: 1} od ${allPages.size}")
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Natrag")
                 }
-            },
-            actions = {
-                IconButton(onClick = { whiteboardViewModel.createNewPage() }) {
-                    Icon(Icons.Default.Add, contentDescription = "Nova stranica")
-                }
             }
         )
 
-        // Drawing Tools
+        // Page Navigation Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Previous Page Button
+            IconButton(
+                onClick = { whiteboardViewModel.navigateToPreviousPage() },
+                enabled = currentPageIndex > 0
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Prethodna stranica")
+            }
+
+            // Page Indicators
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(allPages.size) { index ->
+                    PageIndicator(
+                        pageNumber = allPages[index].pageNumber,
+                        isSelected = index == currentPageIndex,
+                        onClick = { whiteboardViewModel.setCurrentPage(index) }
+                    )
+                }
+
+                // Add New Page Button (samo na zadnjoj stranici)
+                if (allPages.isNotEmpty() && currentPageIndex == allPages.size - 1) {
+                    item {
+                        IconButton(
+                            onClick = { whiteboardViewModel.createNewPage() },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Nova stranica",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Next Page Button
+            IconButton(
+                onClick = { whiteboardViewModel.navigateToNextPage() },
+                enabled = currentPageIndex < allPages.size - 1
+            ) {
+                Icon(Icons.Default.ArrowForward, contentDescription = "Sljedeća stranica")
+            }
+        }
+
+        // Drawing Tools (postojeći kod)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -103,6 +179,7 @@ fun WhiteboardScreen(
                     .clickable { showColorPicker = true }
             )
 
+            // Stroke Width Slider
             Text("Debljina:")
             Slider(
                 value = strokeWidth,
@@ -111,13 +188,9 @@ fun WhiteboardScreen(
                 modifier = Modifier.weight(1f)
             )
             Text("${strokeWidth.toInt()}px")
-
-            IconButton(onClick = { /* TODO: Implement clear */ }) {
-                Icon(Icons.Default.Clear, contentDescription = "Očisti")
-            }
         }
 
-        // Canvas
+        // Canvas (postojeći kod ostaje isti)
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -128,13 +201,12 @@ fun WhiteboardScreen(
                             currentPath = Path().apply { moveTo(offset.x, offset.y) }
                             currentPoints = listOf(Point(offset.x, offset.y))
                         },
-                        onDrag = { change, dragAmount ->
+                        onDrag = { change, _ ->
                             val newPoint = Point(change.position.x, change.position.y)
                             currentPoints = currentPoints + newPoint
                             currentPath.lineTo(change.position.x, change.position.y)
                         },
                         onDragEnd = {
-                            // Pošalji stroke na Firebase
                             if (currentPoints.isNotEmpty()) {
                                 whiteboardViewModel.addStroke(
                                     points = currentPoints,
@@ -146,7 +218,6 @@ fun WhiteboardScreen(
                             currentPath = Path()
                         }
                     )
-
                 }
         ) {
             // Crtaj postojeće stroke-ove
@@ -185,7 +256,7 @@ fun WhiteboardScreen(
         }
     }
 
-    // Color Picker Dialog
+    // Color Picker Dialog (postojeći kod)
     if (showColorPicker) {
         ColorPickerDialog(
             onColorSelected = { color ->
@@ -198,13 +269,53 @@ fun WhiteboardScreen(
 }
 
 @Composable
+fun PageIndicator(
+    pageNumber: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .size(32.dp)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 4.dp else 2.dp
+        )
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = pageNumber.toString(),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isSelected)
+                    MaterialTheme.colorScheme.onPrimary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 fun ColorPickerDialog(
     onColorSelected: (Color) -> Unit,
     onDismiss: () -> Unit
 ) {
     val colors = listOf(
         Color.Black, Color.Red, Color.Green, Color.Blue,
-        Color.Yellow, Color.Magenta, Color.Cyan, Color.Gray
+        Color.Yellow, Color.Magenta, Color.Cyan, Color.Gray,
+        Color(0xFF8B4513),
+        Color(0xFFFFA500),
+        Color(0xFF800080),
+        Color(0xFFFFB6C1)
     )
 
     AlertDialog(
@@ -234,3 +345,5 @@ fun ColorPickerDialog(
         }
     )
 }
+
+
