@@ -284,36 +284,44 @@ fun WhiteboardScreen(
                                 currentPoints = listOf(Point(offset.x, offset.y))
                             },
                             onDrag = { change, _ ->
-                                if (isEraser && eraserMode == EraseMode.STROKE) {
-                                    // Brisanje stroke-ova dok vučeš prst
+                                val newPoint = Point(change.position.x, change.position.y)
+                                currentPoints = currentPoints + newPoint
+                                currentPath.lineTo(newPoint.x, newPoint.y)
+
+                                if (isEraser && eraserMode == EraseMode.COLOR) {
+                                    whiteboardViewModel.addStroke(
+                                        points = listOf(newPoint),
+                                        color = "#FFFFFF",
+                                        strokeWidth = eraserWidth
+                                    )
+                                    currentPoints = emptyList()
+                                    currentPath = Path()
+                                } else if (isEraser && eraserMode == EraseMode.STROKE) {
                                     val strokeToRemove = strokes.lastOrNull { stroke ->
                                         stroke.points.any { point ->
-                                            val dx = point.x - change.position.x
-                                            val dy = point.y - change.position.y
+                                            val dx = point.x - newPoint.x
+                                            val dy = point.y - newPoint.y
                                             kotlin.math.sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
                                         }
                                     }
                                     strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
-                                } else {
-                                    val newPoint = Point(change.position.x, change.position.y)
-                                    currentPoints = currentPoints + newPoint
-                                    currentPath.lineTo(change.position.x, change.position.y)
                                 }
-                            },
+                            }
+                            ,
                             onDragEnd = {
-                                if (!isEraser || eraserMode == EraseMode.COLOR) {
+                                if (!isEraser) {
                                     if (currentPoints.isNotEmpty()) {
                                         whiteboardViewModel.addStroke(
                                             points = currentPoints,
-                                            color = if (isEraser && eraserMode == EraseMode.COLOR) "#FFFFFF"
-                                            else String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
-                                            strokeWidth = if (isEraser && eraserMode == EraseMode.COLOR) eraserWidth else strokeWidth
+                                            color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                                            strokeWidth = strokeWidth
                                         )
                                     }
                                 }
                                 currentPoints = emptyList()
                                 currentPath = Path()
                             }
+
                         )
                     }
             ) {
