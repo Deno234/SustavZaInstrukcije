@@ -1,25 +1,57 @@
 package com.example.sustavzainstrukcije.ui.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import com.example.sustavzainstrukcije.ui.screens.MessagesScreen
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.sustavzainstrukcije.ui.screens.ChatScreen
 import com.example.sustavzainstrukcije.ui.screens.CheckProfileScreen
+import com.example.sustavzainstrukcije.ui.screens.FindInstructorsScreen
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
+import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
 @Composable
 fun NavGraph(
     navController: NavHostController = rememberNavController(),
+    authViewModel: AuthViewModel,
     onGoogleSignIn: () -> Unit,
     onGoogleRegistrationComplete: () -> Unit
 ) {
-    NavHost(navController = navController, startDestination = "main") {
+
+    val isAuthenticated by authViewModel.isAuthenticated.collectAsState()
+
+    val startDestination = when (isAuthenticated) {
+        true -> "home"
+        false -> "main"
+        null -> "loading"
+    }
+
+    NavHost(navController = navController, startDestination = startDestination) {
+
+        composable("loading") {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
         composable("main") {
             MainScreen(
                 onLoginClick = { navController.navigate("login") },
@@ -43,7 +75,7 @@ fun NavGraph(
             )
         }
         composable("home") {
-            HomeScreen(navController)
+            HomeScreen(navController, authViewModel)
         }
 
         composable("profile") {
@@ -55,14 +87,31 @@ fun NavGraph(
             CheckProfileScreen(instructorId = instructorId, navController = navController)
         }
 
-        /*composable("appointments") {
-            AppointmentsScreen()
+        composable("chat/{chatId}/{otherUserId}") { backStackEntry ->
+            val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
+            val otherUserId = backStackEntry.arguments?.getString("otherUserId") ?: ""
+
+            if (chatId.isNotEmpty() && otherUserId.isNotEmpty()) {
+                ChatScreen(
+                    chatId = chatId,
+                    otherUserId = otherUserId,
+                    navController = navController
+                )
+            } else {
+                Text("Greška: ID chata ili ID drugog korisnika nedostaje.")
+            }
         }
 
-        composable("messages") {
-            MessagesScreen()
+        composable("messages/{userId}") { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+            MessagesScreen(userId = userId, navController = navController)
         }
 
+        composable("findInstructorsScreen") {
+            FindInstructorsScreen(navController)
+        }
+
+        /*
         composable("otherInstructors") {
             OtherInstructorsScreen()
         }*/

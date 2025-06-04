@@ -19,30 +19,37 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingExcept
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
+
+    private val _isAuthenticated = MutableStateFlow<Boolean?>(null) // null = checking, true = authenticated, false = not authenticated
+    val isAuthenticated: StateFlow<Boolean?> = _isAuthenticated.asStateFlow()
+
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
     private val _errorMessage = MutableSharedFlow<String>()
-    private val _loadingState = MutableStateFlow(false)
-    private val _userData = MutableStateFlow<User?>(null)
+    val errorMessage = _errorMessage.asSharedFlow()
 
-    val credentialManager = CredentialManager.create(application)
+    private val _loadingState = MutableStateFlow(false)
+    val loadingState: StateFlow<Boolean> = _loadingState.asStateFlow()
+
+    private val _userData = MutableStateFlow<User?>(null)
     val userData: StateFlow<User?> = _userData.asStateFlow()
 
-    var currentUserId: String? = null
-    private lateinit var navController: NavController
+    val credentialManager: CredentialManager = CredentialManager.create(application)
 
-    fun setNavController(controller: NavController) {
-        navController = controller
-    }
+    var currentUserId: String? = auth.currentUser?.uid
+        private set
 
     fun initiateGoogleSignIn(launcher: (GetCredentialRequest) -> Unit) {
         _loadingState.value = true
@@ -74,59 +81,72 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     .addOnCompleteListener { task ->
                         _loadingState.value = false
                         if (task.isSuccessful) {
-                            checkUserInFirestore(auth.currentUser?.uid)
+                            Log.d(TAG, "Firebase signInWithCredential successful.")
+                            this.currentUserId = auth.currentUser?.uid
+                            checkUserInFirestore(this.currentUserId)
                         } else {
+                            Log.w(TAG, "Firebase signInWithCredential failed.", task.exception)
                             handleAuthError(task.exception)
                         }
                     }
             } else {
                 _loadingState.value = false
+                Log.w(TAG, "Invalid credential type received from Google Sign-In.")
                 viewModelScope.launch {
-                    _errorMessage.emit("Invalid credential type")
+                    _errorMessage.emit("Neispravan tip vjerodajnice.")
                 }
             }
         } catch (e: GoogleIdTokenParsingException) {
             _loadingState.value = false
+            Log.e(TAG, "GoogleIdTokenParsingException", e)
             handleAuthError(e)
         }
     }
 
     fun handleSignInError(e: GetCredentialException) {
         _loadingState.value = false
+        Log.e(TAG, "GetCredentialException", e)
         handleAuthError(e)
     }
 
     fun checkUserInFirestore(userId: String?) {
-        currentUserId = userId
-        if (userId == null) {
+        if (userId == null || userId.isEmpty()) {
+            Log.e(TAG, "checkUserInFirestore called with null or empty userId.")
             viewModelScope.launch {
-                _errorMessage.emit("User authentication failed")
+                _errorMessage.emit("Autentifikacija korisnika nije uspjela.")
             }
+            _loadingState.value = false
             return
         }
-
+        _loadingState.value = true
         db.collection("users").document(userId).get()
             .addOnSuccessListener { document ->
+                _loadingState.value = false
                 viewModelScope.launch {
                     if (document.exists()) {
                         _userData.value = document.toObject(User::class.java)?.copy(id = userId)
-                        navigateTo("home")
+                        Log.d(TAG, "User $userId exists in Firestore. UserData: ${_userData.value}")
+                        updateFcmToken()
+                        _isAuthenticated.value = true // Promijeni stanje umjesto navigacije
                     } else {
-                        navigateTo("googleRegistration")
+                        Log.d(TAG, "User $userId does not exist in Firestore.")
+                        _isAuthenticated.value = false // Korisnik treba dovršiti registraciju
                     }
                 }
             }
             .addOnFailureListener { exception ->
+                _loadingState.value = false
+                Log.e(TAG, "Error fetching user from Firestore for $userId.", exception)
                 viewModelScope.launch {
-                    _errorMessage.emit("Database error: ${exception.localizedMessage}")
+                    _errorMessage.emit("Greška u bazi: ${exception.localizedMessage}")
                 }
             }
     }
 
     private fun handleAuthError(exception: Exception?) {
         val errorMessage = when (exception) {
-            is ApiException -> "Google sign-in failed: ${exception.statusCode}"
-            else -> "Authentication failed: ${exception?.localizedMessage}"
+            is ApiException -> "Google prijava nije uspjela: ${exception.statusCode}"
+            else -> "Autentifikacija nije uspjela: ${exception?.localizedMessage}"
         }
         Log.e(TAG, errorMessage, exception)
         viewModelScope.launch {
@@ -134,45 +154,129 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun navigateTo(destination: String) {
-        navController.navigate(destination) {
-            if (destination == "home") {
-                popUpTo("login") { inclusive = true }
-            }
-        }
-    }
-
     fun fetchCurrentUserData() {
-        val currentUser = auth.currentUser
-        currentUserId = currentUser?.uid
+        val firebaseUser = auth.currentUser
+        this.currentUserId = firebaseUser?.uid
 
-        auth.currentUser?.uid?.let { userId ->
-            db.collection("users").document(userId).get()
-                .addOnSuccessListener { document ->
-                    _userData.value =
-                        document.toObject(User::class.java)?.copy(id = userId)
-                }
+        firebaseUser?.uid?.let { userId ->
+            if (userId.isNotEmpty()) {
+                db.collection("users").document(userId).get()
+                    .addOnSuccessListener { document ->
+                        if (document.exists()) {
+                            _userData.value = document.toObject(User::class.java)?.copy(id = userId)
+                            Log.d(TAG, "Fetched current user data: ${_userData.value}")
+                            updateFcmToken()
+                        } else {
+                            Log.d(TAG, "No document found for current user $userId during fetch.")
+                            _userData.value = null
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Error fetching current user data for $userId.", e)
+                        _userData.value = null
+                    }
+            }
+        } ?: run {
+            Log.d(TAG, "No current Firebase user to fetch data for.")
+            _userData.value = null
+            this.currentUserId = null
         }
     }
 
     fun updateInstructorProfile(name: String, subjects: List<String>, availableHours: Map<String, List<String>>) {
-        val currentUserId = currentUserId ?: return
+        val userId = this.currentUserId ?: run {
+            Log.w(TAG, "Cannot update profile: currentUserId is null.")
+            viewModelScope.launch { _errorMessage.emit("Niste prijavljeni.") }
+            return
+        }
         val updates = mapOf(
             "name" to name,
             "subjects" to subjects,
             "availableHours" to availableHours
         )
-        db.collection("users").document(currentUserId).update(updates)
+        db.collection("users").document(userId).update(updates)
             .addOnSuccessListener {
+                Log.d(TAG, "Instructor profile updated for $userId.")
                 fetchCurrentUserData()
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "Error updating instructor profile", e)
+                Log.e(TAG, "Error updating instructor profile for $userId.", e)
+                viewModelScope.launch { _errorMessage.emit("Greška pri ažuriranju profila.") }
             }
+    }
+
+    /**
+     * Dohvaća trenutni FCM token i sprema/ažurira ga u Firestore-u za prijavljenog korisnika.
+     * Ovu funkciju treba pozvati MainActivity nakon što je dobivena dozvola za notifikacije,
+     * ili AuthViewModel nakon uspješne prijave/registracije.
+     */
+    fun updateFcmToken() {
+        val userId = this.currentUserId
+        if (userId == null || userId.isEmpty()) {
+            Log.w(TAG, "Cannot update FCM token: currentUserId is not available.")
+            return
+        }
+
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+            val token = task.result
+            Log.d(TAG, "Fetched FCM token: $token for user $userId")
+
+            if (token != null) {
+                val userDocRef = db.collection("users").document(userId)
+                // Koristi se SetOptions.merge() da se ne prebrišu ostala polja u dokumentu.
+                // Primjer za jedan token:
+                val tokenUpdate = mapOf("fcmToken" to token)
+                // Primjer za listu tokena:
+                // val tokenUpdate = mapOf("fcmTokens" to FieldValue.arrayUnion(token))
+
+                userDocRef.set(tokenUpdate, SetOptions.merge())
+                    .addOnSuccessListener { Log.d(TAG, "FCM token explicitly updated for user $userId") }
+                    .addOnFailureListener { e -> Log.w(TAG, "Error updating FCM token for user $userId", e) }
+            } else {
+                Log.w(TAG, "Fetched FCM token is null for user $userId")
+            }
+        }
+    }
+
+    fun checkAuthState() {
+        val currentFirebaseUser = auth.currentUser
+        if (currentFirebaseUser != null) {
+            this.currentUserId = currentFirebaseUser.uid
+            Log.d(TAG, "User already authenticated: ${this.currentUserId}")
+            fetchCurrentUserData()
+            _isAuthenticated.value = true
+        } else {
+            Log.d(TAG, "No authenticated user found")
+            _isAuthenticated.value = false
+        }
+    }
+
+    fun signOut() {
+        val userId = this.currentUserId
+        if (userId != null) {
+            db.collection("users").document(userId)
+                .update("fcmToken", null)
+                .addOnSuccessListener {
+                    Log.d(TAG, "FCM token removed for user $userId")
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Error removing FCM token", e)
+                }
+        }
+
+        auth.signOut()
+        this.currentUserId = null
+        _userData.value = null
+        _isAuthenticated.value = false
+        Log.d(TAG, "User signed out successfully")
     }
 
     companion object {
         private const val TAG = "AuthViewModel"
     }
-}
 
+}

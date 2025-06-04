@@ -11,14 +11,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,19 +31,23 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.sustavzainstrukcije.ui.utils.Constants.ORDERED_DAYS
+import com.example.sustavzainstrukcije.ui.utils.generateChatId
+import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.InstructorsViewModel
 
 @Composable
 fun CheckProfileScreen(
     instructorId: String,
     navController: NavController,
-    instructorsViewModel: InstructorsViewModel = viewModel()
+    instructorsViewModel: InstructorsViewModel = viewModel(),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val instructor by instructorsViewModel.checkedInstructor.collectAsState()
     var showTimeSlots by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         instructorsViewModel.fetchCheckedInstructor(instructorId)
+        authViewModel.fetchCurrentUserData()
     }
 
     Column(modifier = Modifier
@@ -79,6 +79,16 @@ fun CheckProfileScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = { navController.navigate("chat/${authViewModel.currentUserId?.let {
+                generateChatId(
+                    it, instructorId)
+            }}/$instructorId")},
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Chat with Instructor")
         }
         Spacer(modifier = Modifier.height(24.dp))
         Button(
