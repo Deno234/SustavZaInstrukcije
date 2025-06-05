@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -92,6 +93,8 @@ fun WhiteboardScreen(
     var showEraserSizePopup by remember { mutableStateOf(false) }
     var localEraserWidth by remember { mutableStateOf(eraserWidth) }
     var showEraseModePopup by remember { mutableStateOf(false) }
+
+    var showStrokeWidthPopup by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -194,14 +197,9 @@ fun WhiteboardScreen(
                         .background(selectedColor)
                         .clickable { showColorPicker = true }
                 )
-                Text("Debljina:", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = strokeWidth,
-                    onValueChange = { strokeWidth = it },
-                    valueRange = 1f..20f,
-                    modifier = Modifier.weight(1f)
-                )
-                Text("${strokeWidth.toInt()}px")
+                IconButton(onClick = { showStrokeWidthPopup = true }) {
+                    Icon(Icons.Default.Create, contentDescription = "Debljina olovke")
+                }
 
                 IconButton(
                     onClick = { whiteboardViewModel.toggleEraser() },
@@ -327,7 +325,7 @@ fun WhiteboardScreen(
                                         val strokeColor = if (isEraser) {
                                             String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
                                         } else {
-                                            String.format("#%06X", colorToUse.toArgb() and 0xFFFFFF)
+                                            String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
                                         }
 
                                         val strokeWidthToUse = if (isEraser) {
@@ -471,6 +469,28 @@ fun WhiteboardScreen(
                 confirmButton = {
                     TextButton(onClick = { showEraseModePopup = false }) {
                         Text("Zatvori")
+                    }
+                }
+            )
+        }
+
+        if (showStrokeWidthPopup) {
+            AlertDialog(
+                onDismissRequest = { showStrokeWidthPopup = false },
+                title = { Text("Debljina olovke") },
+                text = {
+                    Column {
+                        Slider(
+                            value = strokeWidth,
+                            onValueChange = { strokeWidth = it },
+                            valueRange = 1f..20f
+                        )
+                        Text("Trenutna debljina: ${strokeWidth.toInt()}px")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showStrokeWidthPopup = false }) {
+                        Text("Gotovo")
                     }
                 }
             )
