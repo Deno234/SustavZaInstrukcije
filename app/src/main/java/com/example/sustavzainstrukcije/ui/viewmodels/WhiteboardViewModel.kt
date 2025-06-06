@@ -419,10 +419,16 @@ class WhiteboardViewModel : ViewModel() {
             }
     }
 
+    fun clearCurrentPage() {
+        val pageId = _currentPage.value?.id ?: return
 
-
-
-
+        firestore.collection("drawing_strokes")
+            .whereEqualTo("pageId", pageId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                snapshot.documents.forEach { it.reference.delete() }
+            }
+    }
 
     override fun onCleared() {
         super.onCleared()

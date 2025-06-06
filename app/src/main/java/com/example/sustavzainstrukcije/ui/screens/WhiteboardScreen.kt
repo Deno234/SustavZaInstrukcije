@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -120,6 +121,9 @@ fun WhiteboardScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    var showClearDialog by remember { mutableStateOf(false) }
+
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -289,6 +293,15 @@ fun WhiteboardScreen(
                 Icon(
                     painter = painterResource(R.drawable.nikola_tesla),
                     contentDescription = "Redo"
+                )
+            }
+
+            IconButton(onClick = {
+                showClearDialog = true
+            }) {
+                Icon(
+                    Icons.Default.DeleteOutline,
+                    contentDescription = "Očisti stranicu"
                 )
             }
 
@@ -817,6 +830,23 @@ fun WhiteboardScreen(
                     TextButton(onClick = { showDeleteDialog = false }) {
                         Text("Odustani")
                     }
+                }
+            )
+        }
+
+        if (showClearDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearDialog = false },
+                title = { Text("Očisti stranicu") },
+                text = { Text("Želiš li ukloniti sve crteže s ove stranice?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        whiteboardViewModel.clearCurrentPage()
+                        showClearDialog = false
+                    }) { Text("Da") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearDialog = false }) { Text("Ne") }
                 }
             )
         }
