@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -21,12 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Create
-import androidx.compose.material.icons.filled.Rectangle
-import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,15 +57,14 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.toColor
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.R
 import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
-import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
-import androidx.core.graphics.toColorInt
 import com.example.sustavzainstrukcije.ui.data.ToolMode
+import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -110,6 +106,9 @@ fun WhiteboardScreen(
     var showTextInputDialog by remember { mutableStateOf(false) }
     var textInput by remember { mutableStateOf("") }
     var textInputOffset by remember { mutableStateOf(Offset.Zero) }
+
+    var textFontSize by remember { mutableStateOf(16f) }
+    var isTextBold by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -413,14 +412,21 @@ fun WhiteboardScreen(
                         val color = Color(stroke.color.toColorInt())
                         when {
                             stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
-                                val text = stroke.shapeType.substringAfter("text:")
+
+                                val full = stroke.shapeType
+                                val text = full.substringAfter("text:").substringBefore(";") ?: ""
+                                val fontSize = full.substringAfter("font=")?.substringBefore(";")
+                                    ?.toFloatOrNull() ?: (stroke.strokeWidth * 6)
+                                val isBold = full.substringAfter("bold=").toBooleanStrictOrNull() ?: false
+
                                 drawContext.canvas.nativeCanvas.drawText(
                                     text,
                                     stroke.points[0].x,
                                     stroke.points[0].y,
                                     android.graphics.Paint().apply {
                                         this.color = stroke.color.toColorInt()
-                                        textSize = stroke.strokeWidth * 6 
+                                        textSize = fontSize
+                                        isFakeBoldText = isBold
                                         isAntiAlias = true
                                     }
                                 )
@@ -697,14 +703,34 @@ fun WhiteboardScreen(
                 onDismissRequest = { showTextInputDialog = false },
                 title = { Text("Unesi tekst") },
                 text = {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         androidx.compose.material3.OutlinedTextField(
                             value = textInput,
                             onValueChange = { textInput = it },
                             label = { Text("Tekst") }
                         )
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Veličina: ${textFontSize.toInt()}sp", modifier = Modifier.width(100.dp))
+                            Slider(
+                                value = textFontSize,
+                                onValueChange = { textFontSize = it },
+                                valueRange = 12f..64f,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Checkbox(
+                                checked = isTextBold,
+                                onCheckedChange = { isTextBold = it }
+                            )
+                            Text("Podebljano")
+                        }
                     }
-                },
+                }
+
+                ,
                 confirmButton = {
                     TextButton(onClick = {
                         val textPoint = listOf(Point(textInputOffset.x, textInputOffset.y))
@@ -712,7 +738,7 @@ fun WhiteboardScreen(
                             points = textPoint,
                             color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
                             strokeWidth = strokeWidth,
-                            shapeType = "text:$textInput"
+                            shapeType = "text:$textInput;font=${textFontSize.toInt()};bold=${isTextBold}"
                         )
                         showTextInputDialog = false
                         textInput = ""
