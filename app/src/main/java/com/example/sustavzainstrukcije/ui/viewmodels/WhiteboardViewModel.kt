@@ -233,13 +233,15 @@ class WhiteboardViewModel : ViewModel() {
         val currentUserId = auth.currentUser?.uid ?: return
         val pages = _allPages.value
         val nextPageNumber = (pages.maxOfOrNull { it.pageNumber } ?: 0) + 1
+        val pageName = "Stranica $nextPageNumber"
 
         val pageId = UUID.randomUUID().toString()
         val newPage = WhiteboardPage(
             id = pageId,
             sessionId = sessionId,
             pageNumber = nextPageNumber,
-            createdBy = currentUserId
+            createdBy = currentUserId,
+            title = pageName
         )
 
         firestore.collection("whiteboard_pages").document(pageId)
@@ -356,6 +358,24 @@ class WhiteboardViewModel : ViewModel() {
             }
         }
     }
+
+    fun renamePage(pageId: String, newTitle: String) {
+        firestore.collection("whiteboard_pages").document(pageId)
+            .update("title", newTitle)
+            .addOnSuccessListener {
+                // Ažuriraj lokalno
+                val updatedPages = _allPages.value.map {
+                    if (it.id == pageId) it.copy(title = newTitle) else it
+                }
+                _allPages.value = updatedPages
+
+                // Ako je promijenjena aktivna stranica
+                if (_currentPage.value?.id == pageId) {
+                    _currentPage.value = updatedPages.find { it.id == pageId }
+                }
+            }
+    }
+
 
 
     override fun onCleared() {

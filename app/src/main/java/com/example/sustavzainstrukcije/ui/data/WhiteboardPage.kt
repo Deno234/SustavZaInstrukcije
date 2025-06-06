@@ -7,5 +7,6 @@ data class WhiteboardPage(
     val strokes: List<DrawingStroke> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     val isActive: Boolean = true,
-    val createdBy: String = ""
+    val createdBy: String = "",
+    val title: String = ""
 )

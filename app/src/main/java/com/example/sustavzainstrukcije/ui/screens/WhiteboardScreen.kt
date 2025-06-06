@@ -1,8 +1,10 @@
 package com.example.sustavzainstrukcije.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,7 +73,7 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WhiteboardScreen(
     sessionId: String,
@@ -112,7 +115,7 @@ fun WhiteboardScreen(
     var textFontSize by remember { mutableStateOf(16f) }
     var isTextBold by remember { mutableStateOf(false) }
 
-    val erasedStrokeIds = mutableSetOf<String>()
+    var showRenameDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -139,7 +142,13 @@ fun WhiteboardScreen(
     ) {
         TopAppBar(
             title = {
-                Text("Whiteboard - Stranica ${currentPage?.pageNumber ?: 1} od ${allPages.size}")
+                Text(
+                    text = currentPage?.title ?: "Stranica ${currentPage?.pageNumber ?: 1}",
+                    modifier = Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = { showRenameDialog = true }
+                    )
+                )
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
@@ -753,6 +762,31 @@ fun WhiteboardScreen(
                     }) {
                         Text("Odustani")
                     }
+                }
+            )
+        }
+
+        if (showRenameDialog) {
+            var newTitle by remember { mutableStateOf(currentPage?.title ?: "") }
+
+            AlertDialog(
+                onDismissRequest = { showRenameDialog = false },
+                title = { Text("Uredi naziv stranice") },
+                text = {
+                    OutlinedTextField(
+                        value = newTitle,
+                        onValueChange = { newTitle = it },
+                        label = { Text("Naziv") }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        whiteboardViewModel.renamePage(currentPage?.id.orEmpty(), newTitle)
+                        showRenameDialog = false
+                    }) { Text("Spremi") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRenameDialog = false }) { Text("Odustani") }
                 }
             )
         }
