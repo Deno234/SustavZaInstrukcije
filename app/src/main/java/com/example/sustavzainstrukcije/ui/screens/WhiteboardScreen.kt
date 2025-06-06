@@ -128,6 +128,10 @@ fun WhiteboardScreen(
 
     var showClearDialog by remember { mutableStateOf(false) }
 
+    val pointers by whiteboardViewModel.pointers.collectAsState()
+    val userNames by whiteboardViewModel.userNames.collectAsState()
+
+
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -335,7 +339,11 @@ fun WhiteboardScreen(
                                 if (toolMode == ToolMode.TEXT) {
                                     showTextInputDialog = true
                                     textInputOffset = offset
-                                } else {
+                                } else if (toolMode == ToolMode.POINTER) {
+                                    whiteboardViewModel.sendPointer(sessionId, Point(offset.x, offset.y))
+                                    return@detectTapGestures
+                                }
+                                    else {
                                     // Normalni tap za crtanje točke
                                     val singlePoint = listOf(Point(offset.x, offset.y))
                                     whiteboardViewModel.addStroke(
@@ -531,6 +539,28 @@ fun WhiteboardScreen(
                     }
                 }
 
+                pointers.forEach { (userId, point) ->
+                    drawCircle(
+                        color = Color.Red,
+                        center = Offset(point.x, point.y),
+                        radius = 10f
+                    )
+
+                    val label = userNames[userId] ?: userId.take(6)
+
+                    drawContext.canvas.nativeCanvas.drawText(
+                        label,
+                        point.x + 12,
+                        point.y - 12,
+                        android.graphics.Paint().apply {
+                            color = android.graphics.Color.BLACK
+                            textSize = 28f
+                            isFakeBoldText = true
+                        }
+                    )
+                }
+
+
                 if (isEraser && currentPoints.isNotEmpty()) {
                     val lastPoint = currentPoints.last()
 
@@ -693,29 +723,47 @@ fun WhiteboardScreen(
                 text = {
                     Column {
                         TextButton(onClick = {
-                            whiteboardViewModel.setToolMode(ToolMode.DRAW)
+                            whiteboardViewModel.setToolMode(ToolMode.DRAW, sessionId)
                             showToolSelector = false
-                        }) { Text("Pen") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.DRAW) Color.LightGray else Color.Transparent
+                        )
+                        ) { Text("Pen") }
 
                         TextButton(onClick = {
-                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_RECT)
+                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_RECT, sessionId)
                             showToolSelector = false
-                        }) { Text("Rectangle") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.SHAPE_RECT) Color.LightGray else Color.Transparent
+                        )) { Text("Rectangle") }
 
                         TextButton(onClick = {
-                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_CIRCLE)
+                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_CIRCLE, sessionId)
                             showToolSelector = false
-                        }) { Text("Circle") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.SHAPE_CIRCLE) Color.LightGray else Color.Transparent
+                        )) { Text("Circle") }
 
                         TextButton(onClick = {
-                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_LINE)
+                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_LINE, sessionId)
                             showToolSelector = false
-                        }) { Text("Line") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.SHAPE_LINE) Color.LightGray else Color.Transparent
+                        )) { Text("Line") }
 
                         TextButton(onClick = {
-                            whiteboardViewModel.setToolMode(ToolMode.TEXT)
+                            whiteboardViewModel.setToolMode(ToolMode.TEXT, sessionId)
                             showToolSelector = false
-                        }) { Text("Text") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.TEXT) Color.LightGray else Color.Transparent
+                        )) { Text("Text") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.POINTER, sessionId)
+                            showToolSelector = false
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.POINTER) Color.LightGray else Color.Transparent
+                        )) { Text("Pointer") }
                     }
                 },
                 confirmButton = {

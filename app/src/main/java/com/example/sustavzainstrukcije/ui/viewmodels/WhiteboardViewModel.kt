@@ -9,6 +9,9 @@ import com.example.sustavzainstrukcije.ui.data.ToolMode
 import com.example.sustavzainstrukcije.ui.data.WhiteboardPage
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.database
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.firestore
@@ -59,9 +62,23 @@ class WhiteboardViewModel : ViewModel() {
     private val _toolMode = MutableStateFlow(ToolMode.DRAW)
     val toolMode: StateFlow<ToolMode> = _toolMode.asStateFlow()
 
-    fun setToolMode(mode: ToolMode) {
-        _toolMode.value = mode
+    private val pointerRef = db.getReference("whiteboard_pointers")
+
+    private val _pointers = MutableStateFlow<Map<String, Point>>(emptyMap())
+    val pointers: StateFlow<Map<String, Point>> = _pointers.asStateFlow()
+
+    private val _userNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val userNames: StateFlow<Map<String, String>> = _userNames
+
+
+    fun setToolMode(tool: ToolMode, sessionId: String) {
+        _toolMode.value = tool
+
+        if (tool != ToolMode.POINTER) {
+            clearPointer(sessionId)
+        }
     }
+
 
     fun initializeWhiteboard(sessionId: String) {
         if (initializedSessions.contains(sessionId)) {
@@ -72,6 +89,9 @@ class WhiteboardViewModel : ViewModel() {
         initializedSessions.add(sessionId)
         Log.d("WhiteboardViewModel", "Initializing whiteboard for session: $sessionId")
 
+        loadUserNames()
+
+        listenToPointers(sessionId)
         listenToAllPages(sessionId)
     }
 
@@ -429,6 +449,48 @@ class WhiteboardViewModel : ViewModel() {
                 snapshot.documents.forEach { it.reference.delete() }
             }
     }
+
+    private fun listenToPointers(sessionId: String) {
+        pointerRef.child(sessionId).addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val pointerMap = mutableMapOf<String, Point>()
+                for (child in snapshot.children) {
+                    val userId = child.key ?: continue
+                    val x = child.child("x").getValue(Float::class.java) ?: continue
+                    val y = child.child("y").getValue(Float::class.java) ?: continue
+                    pointerMap[userId] = Point(x, y)
+                }
+                _pointers.value = pointerMap
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    fun sendPointer(sessionId: String, point: Point) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+        pointerRef.child(sessionId).child(userId).setValue(point)
+    }
+
+    private fun clearPointer(sessionId: String) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+        pointerRef.child(sessionId).child(userId).removeValue()
+    }
+
+    fun loadUserNames() {
+        firestore.collection("users")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val map = snapshot.documents.associate {
+                    val uid = it.id
+                    val name = it.getString("name") ?: "Korisnik"
+                    uid to name
+                }
+                _userNames.value = map
+            }
+    }
+
+
 
     override fun onCleared() {
         super.onCleared()
