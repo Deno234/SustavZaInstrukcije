@@ -22,13 +22,16 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.LineWeight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,7 +96,7 @@ fun WhiteboardScreen(
     var currentPath by remember { mutableStateOf(Path()) }
     var currentPoints by remember { mutableStateOf(listOf<Point>()) }
     var selectedColor by remember { mutableStateOf(Color.Black) }
-    var strokeWidth by remember { mutableStateOf(5f) }
+    var strokeWidth by remember { mutableFloatStateOf(5f) }
     var showColorPicker by remember { mutableStateOf(false) }
 
     val isEraser by whiteboardViewModel.isEraserActive.collectAsState()
@@ -102,7 +106,7 @@ fun WhiteboardScreen(
     val colorToUse = if (isEraser) Color.White else selectedColor
 
     var showEraserSizePopup by remember { mutableStateOf(false) }
-    var localEraserWidth by remember { mutableStateOf(eraserWidth) }
+    var localEraserWidth by remember { mutableFloatStateOf(eraserWidth) }
     var showEraseModePopup by remember { mutableStateOf(false) }
 
     var showStrokeWidthPopup by remember { mutableStateOf(false) }
@@ -115,7 +119,7 @@ fun WhiteboardScreen(
     var textInput by remember { mutableStateOf("") }
     var textInputOffset by remember { mutableStateOf(Offset.Zero) }
 
-    var textFontSize by remember { mutableStateOf(16f) }
+    var textFontSize by remember { mutableFloatStateOf(16f) }
     var isTextBold by remember { mutableStateOf(false) }
 
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -151,7 +155,7 @@ fun WhiteboardScreen(
         TopAppBar(
             title = {
                 Text(
-                    text = currentPage?.title ?: "Stranica ${currentPage?.pageNumber ?: 1}",
+                    text = currentPage?.title ?: "Page ${currentPage?.pageNumber ?: 1}",
                     modifier = Modifier.combinedClickable(
                         onClick = {},
                         onLongClick = { showRenameDialog = true }
@@ -160,12 +164,12 @@ fun WhiteboardScreen(
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Natrag")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             },
             actions = {
                 IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Obriši stranicu")
+                    Icon(Icons.Default.Delete, contentDescription = "Delete page")
                 }
             }
         )
@@ -182,7 +186,7 @@ fun WhiteboardScreen(
                 onClick = { whiteboardViewModel.navigateToPreviousPage() },
                 enabled = currentPageIndex > 0
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Prethodna stranica")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous page")
             }
 
             LazyRow(
@@ -204,7 +208,7 @@ fun WhiteboardScreen(
                         ) {
                             Icon(
                                 Icons.Default.Add,
-                                contentDescription = "Nova stranica",
+                                contentDescription = "New page",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -216,7 +220,7 @@ fun WhiteboardScreen(
                 onClick = { whiteboardViewModel.navigateToNextPage() },
                 enabled = currentPageIndex < allPages.size - 1
             ) {
-                Icon(Icons.Default.ArrowForward, contentDescription = "Sljedeća stranica")
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next page")
             }
         }
 
@@ -238,7 +242,7 @@ fun WhiteboardScreen(
                         .clickable { showColorPicker = true }
                 )
                 IconButton(onClick = { showStrokeWidthPopup = true }) {
-                    Icon(Icons.Default.Create, contentDescription = "Debljina olovke")
+                    Icon(Icons.Default.LineWeight, contentDescription = "Pen width")
                 }
 
                 IconButton(
@@ -247,26 +251,25 @@ fun WhiteboardScreen(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_eraser),
-                        contentDescription = "Gumica",
+                        contentDescription = "Eraser",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 IconButton(onClick = { showToolSelector = true }) {
-                    Icon(Icons.Default.Create, contentDescription = "Odaberi alat")
+                    Icon(Icons.Default.Build, contentDescription = "Choose a tool")
                 }
             } else {
-                // Gumica
                 IconButton(onClick = { showEraseModePopup = true }) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_edit),
-                        contentDescription = "Odaberi način gumice"
+                        Icons.Default.Build,
+                        contentDescription = "Choose eraser type"
                     )
                 }
 
                 IconButton(onClick = { showEraserSizePopup = true }) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_tune),
-                        contentDescription = "Postavi veličinu gumice"
+                        Icons.Default.LineWeight,
+                        contentDescription = "Pick eraser width"
                     )
                 }
 
@@ -276,7 +279,7 @@ fun WhiteboardScreen(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_eraser),
-                        contentDescription = "Natrag na pisanje",
+                        contentDescription = "Switch to drawing",
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -284,14 +287,14 @@ fun WhiteboardScreen(
 
             IconButton(onClick = { whiteboardViewModel.undo() }) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_notification),
+                    Icons.AutoMirrored.Filled.Undo,
                     contentDescription = "Undo"
                 )
             }
 
             IconButton(onClick = { whiteboardViewModel.redo() }) {
                 Icon(
-                    painter = painterResource(R.drawable.nikola_tesla),
+                    Icons.AutoMirrored.Filled.Redo,
                     contentDescription = "Redo"
                 )
             }
@@ -301,14 +304,13 @@ fun WhiteboardScreen(
             }) {
                 Icon(
                     Icons.Default.DeleteOutline,
-                    contentDescription = "Očisti stranicu"
+                    contentDescription = "Clear the page"
                 )
             }
 
         }
 
-
-        // 4. Canvas za crtanje
+        // 4. Canvas
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -365,7 +367,6 @@ fun WhiteboardScreen(
                                         whiteboardViewModel.removeStroke(it.id)
                                     }
 
-                                    // Prekini dalje procesiranje draga za STROKE brisanje
                                     return@detectDragGestures
                                 }
 
@@ -377,7 +378,7 @@ fun WhiteboardScreen(
                             onDrag = { change, _ ->
                                 val newPoint = Point(change.position.x, change.position.y)
 
-                                // Za oblike: uvijek čuvamo početnu i krajnju točku
+                                // Za oblike: uvijek se čuva početna i krajnja točka
                                 if (toolMode == ToolMode.SHAPE_RECT || toolMode == ToolMode.SHAPE_CIRCLE || toolMode == ToolMode.SHAPE_LINE) {
                                     currentPoints = listOf(currentPoints.firstOrNull() ?: newPoint, newPoint)
                                     return@detectDragGestures
@@ -445,9 +446,9 @@ fun WhiteboardScreen(
                             stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
 
                                 val full = stroke.shapeType
-                                val text = full.substringAfter("text:").substringBefore(";") ?: ""
-                                val fontSize = full.substringAfter("font=")?.substringBefore(";")
-                                    ?.toFloatOrNull() ?: (stroke.strokeWidth * 6)
+                                val text = full.substringAfter("text:").substringBefore(";")
+                                val fontSize = full.substringAfter("font=").substringBefore(";")
+                                    .toFloatOrNull() ?: (stroke.strokeWidth * 6)
                                 val isBold = full.substringAfter("bold=").toBooleanStrictOrNull() ?: false
 
                                 drawContext.canvas.nativeCanvas.drawText(
@@ -481,8 +482,8 @@ fun WhiteboardScreen(
                                         color = color,
                                         topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
                                         size = androidx.compose.ui.geometry.Size(
-                                            width = kotlin.math.abs(p2.x - p1.x),
-                                            height = kotlin.math.abs(p2.y - p1.y)
+                                            width = abs(p2.x - p1.x),
+                                            height = abs(p2.y - p1.y)
                                         ),
                                         style = Stroke(width = stroke.strokeWidth)
                                     )
@@ -533,14 +534,12 @@ fun WhiteboardScreen(
                 if (isEraser && currentPoints.isNotEmpty()) {
                     val lastPoint = currentPoints.last()
 
-                    // Ispuna: blago bijela (transparentna)
                     drawCircle(
                         color = Color.White.copy(alpha = 0.6f),
                         radius = eraserWidth / 2f,
                         center = Offset(lastPoint.x, lastPoint.y)
                     )
 
-                    // Obrub: svijetlo siva za kontrast
                     drawCircle(
                         color = Color.Gray,
                         radius = eraserWidth / 2f,
@@ -570,8 +569,8 @@ fun WhiteboardScreen(
                             color = colorToUse,
                             topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
                             size = androidx.compose.ui.geometry.Size(
-                                width = kotlin.math.abs(p2.x - p1.x),
-                                height = kotlin.math.abs(p2.y - p1.y)
+                                width = abs(p2.x - p1.x),
+                                height = abs(p2.y - p1.y)
                             ),
                             style = Stroke(width = strokeWidth)
                         )
@@ -602,7 +601,6 @@ fun WhiteboardScreen(
             }
         }
 
-        // 5. Color picker dijalog
         if (showColorPicker) {
             ColorPickerDialog(
                 onColorSelected = { color ->
@@ -616,7 +614,7 @@ fun WhiteboardScreen(
         if (showEraserSizePopup) {
             AlertDialog(
                 onDismissRequest = { showEraserSizePopup = false },
-                title = { Text("Veličina gumice") },
+                title = { Text("Eraser Width") },
                 text = {
                     Column {
                         Slider(
@@ -624,7 +622,7 @@ fun WhiteboardScreen(
                             onValueChange = { localEraserWidth = it },
                             valueRange = 8f..100f
                         )
-                        Text("Trenutna veličina: ${localEraserWidth.toInt()}px")
+                        Text("Current width: ${localEraserWidth.toInt()}px")
                     }
                 },
                 confirmButton = {
@@ -632,7 +630,7 @@ fun WhiteboardScreen(
                         whiteboardViewModel.setEraserSize(localEraserWidth)
                         showEraserSizePopup = false
                     }) {
-                        Text("Gotovo")
+                        Text("Done")
                     }
                 }
             )
@@ -641,22 +639,26 @@ fun WhiteboardScreen(
         if (showEraseModePopup) {
             AlertDialog(
                 onDismissRequest = { showEraseModePopup = false },
-                title = { Text("Način gumice") },
+                title = { Text("Eraser Type") },
                 text = {
                     Column {
                         TextButton(onClick = {
                             whiteboardViewModel.setEraseMode(EraseMode.COLOR)
                             showEraseModePopup = false
-                        }) { Text("Boja") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (eraserMode == EraseMode.COLOR) Color.LightGray else Color.Transparent
+                        )) { Text("White Color") }
                         TextButton(onClick = {
                             whiteboardViewModel.setEraseMode(EraseMode.STROKE)
                             showEraseModePopup = false
-                        }) { Text("Stroke") }
+                        }, colors = ButtonDefaults.textButtonColors(
+                                containerColor = if (eraserMode == EraseMode.STROKE) Color.LightGray else Color.Transparent
+                            )) { Text("Remove Stroke") }
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { showEraseModePopup = false }) {
-                        Text("Zatvori")
+                        Text("Close")
                     }
                 }
             )
@@ -665,7 +667,7 @@ fun WhiteboardScreen(
         if (showStrokeWidthPopup) {
             AlertDialog(
                 onDismissRequest = { showStrokeWidthPopup = false },
-                title = { Text("Debljina olovke") },
+                title = { Text("Pen Width") },
                 text = {
                     Column {
                         Slider(
@@ -673,12 +675,12 @@ fun WhiteboardScreen(
                             onValueChange = { strokeWidth = it },
                             valueRange = 1f..20f
                         )
-                        Text("Trenutna debljina: ${strokeWidth.toInt()}px")
+                        Text("Current width: ${strokeWidth.toInt()}px")
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { showStrokeWidthPopup = false }) {
-                        Text("Gotovo")
+                        Text("Done")
                     }
                 }
             )
@@ -687,43 +689,38 @@ fun WhiteboardScreen(
         if (showToolSelector) {
             AlertDialog(
                 onDismissRequest = { showToolSelector = false },
-                title = { Text("Odaberi alat") },
+                title = { Text("Choose Tool") },
                 text = {
                     Column {
                         TextButton(onClick = {
                             whiteboardViewModel.setToolMode(ToolMode.DRAW)
                             showToolSelector = false
-                        }) { Text("Olovka") }
+                        }) { Text("Pen") }
 
                         TextButton(onClick = {
                             whiteboardViewModel.setToolMode(ToolMode.SHAPE_RECT)
                             showToolSelector = false
-                        }) { Text("Pravokutnik") }
+                        }) { Text("Rectangle") }
 
                         TextButton(onClick = {
                             whiteboardViewModel.setToolMode(ToolMode.SHAPE_CIRCLE)
                             showToolSelector = false
-                        }) { Text("Krug") }
+                        }) { Text("Circle") }
 
                         TextButton(onClick = {
                             whiteboardViewModel.setToolMode(ToolMode.SHAPE_LINE)
                             showToolSelector = false
-                        }) { Text("Linija") }
+                        }) { Text("Line") }
 
                         TextButton(onClick = {
                             whiteboardViewModel.setToolMode(ToolMode.TEXT)
                             showToolSelector = false
-                        }) { Text("Tekst") }
-
-                        TextButton(onClick = {
-                            whiteboardViewModel.setToolMode(ToolMode.DRAW)
-                            showToolSelector = false
-                        }) { Text("Poništi odabir") }
+                        }) { Text("Text") }
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { showToolSelector = false }) {
-                        Text("Zatvori")
+                        Text("Close")
                     }
                 }
             )
@@ -732,17 +729,20 @@ fun WhiteboardScreen(
         if (showTextInputDialog) {
             AlertDialog(
                 onDismissRequest = { showTextInputDialog = false },
-                title = { Text("Unesi tekst") },
+                title = { Text("Enter Text") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.OutlinedTextField(
+                        OutlinedTextField(
                             value = textInput,
                             onValueChange = { textInput = it },
-                            label = { Text("Tekst") }
+                            label = { Text("Text") }
                         )
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Veličina: ${textFontSize.toInt()}sp", modifier = Modifier.width(100.dp))
+                            Text(
+                                "Size: ${textFontSize.toInt()}sp",
+                                modifier = Modifier.width(100.dp)
+                            )
                             Slider(
                                 value = textFontSize,
                                 onValueChange = { textFontSize = it },
@@ -756,12 +756,11 @@ fun WhiteboardScreen(
                                 checked = isTextBold,
                                 onCheckedChange = { isTextBold = it }
                             )
-                            Text("Podebljano")
+                            Text("Bolded")
                         }
                     }
-                }
+                },
 
-                ,
                 confirmButton = {
                     TextButton(onClick = {
                         val textPoint = listOf(Point(textInputOffset.x, textInputOffset.y))
@@ -774,7 +773,7 @@ fun WhiteboardScreen(
                         showTextInputDialog = false
                         textInput = ""
                     }) {
-                        Text("Dodaj")
+                        Text("Enter")
                     }
                 },
                 dismissButton = {
@@ -782,7 +781,7 @@ fun WhiteboardScreen(
                         showTextInputDialog = false
                         textInput = ""
                     }) {
-                        Text("Odustani")
+                        Text("Cancel")
                     }
                 }
             )
@@ -793,22 +792,22 @@ fun WhiteboardScreen(
 
             AlertDialog(
                 onDismissRequest = { showRenameDialog = false },
-                title = { Text("Uredi naziv stranice") },
+                title = { Text("Edit Page Name") },
                 text = {
                     OutlinedTextField(
                         value = newTitle,
                         onValueChange = { newTitle = it },
-                        label = { Text("Naziv") }
+                        label = { Text("Name") }
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = {
                         whiteboardViewModel.renamePage(currentPage?.id.orEmpty(), newTitle)
                         showRenameDialog = false
-                    }) { Text("Spremi") }
+                    }) { Text("Save") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showRenameDialog = false }) { Text("Odustani") }
+                    TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
                 }
             )
         }
@@ -816,19 +815,19 @@ fun WhiteboardScreen(
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                title = { Text("Brisanje stranice") },
-                text = { Text("Jeste li sigurni da želite obrisati ovu stranicu?") },
+                title = { Text("Delete Page") },
+                text = { Text("Are you sure you want to delete this page?") },
                 confirmButton = {
                     TextButton(onClick = {
                         whiteboardViewModel.deleteCurrentPage()
                         showDeleteDialog = false
                     }) {
-                        Text("Obriši")
+                        Text("Delete")
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeleteDialog = false }) {
-                        Text("Odustani")
+                        Text("Cancel")
                     }
                 }
             )
@@ -837,16 +836,16 @@ fun WhiteboardScreen(
         if (showClearDialog) {
             AlertDialog(
                 onDismissRequest = { showClearDialog = false },
-                title = { Text("Očisti stranicu") },
-                text = { Text("Želiš li ukloniti sve crteže s ove stranice?") },
+                title = { Text("Clear Page") },
+                text = { Text("Are you sure you want to clear this page?") },
                 confirmButton = {
                     TextButton(onClick = {
                         whiteboardViewModel.clearCurrentPage()
                         showClearDialog = false
-                    }) { Text("Da") }
+                    }) { Text("Yes") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showClearDialog = false }) { Text("Ne") }
+                    TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
                 }
             )
         }
@@ -908,7 +907,7 @@ fun ColorPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Izaberi boju") },
+        title = { Text("Pick Color") },
         text = {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
@@ -928,7 +927,7 @@ fun ColorPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Odustani")
+                Text("Cancel")
             }
         }
     )
@@ -945,7 +944,7 @@ fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
                 .substringBefore(";")
                 .toFloatOrNull() ?: (stroke.strokeWidth * 6)
             val tolerance = fontSize
-            abs(x - textX) < tolerance * 4 && abs(y - textY) < tolerance // okvir teksta
+            abs(x - textX) < tolerance * 4 && abs(y - textY) < tolerance
         }
 
         stroke.shapeType == "circle" && stroke.points.size == 2 -> {

@@ -234,7 +234,7 @@ class WhiteboardViewModel : ViewModel() {
         val currentUserId = auth.currentUser?.uid ?: return
         val pages = _allPages.value
         val nextPageNumber = (pages.maxOfOrNull { it.pageNumber } ?: 0) + 1
-        val pageName = "Stranica $nextPageNumber"
+        val pageName = "Page $nextPageNumber"
 
         val pageId = UUID.randomUUID().toString()
         val newPage = WhiteboardPage(
