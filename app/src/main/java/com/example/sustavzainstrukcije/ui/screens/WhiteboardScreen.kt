@@ -21,7 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Rectangle
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -63,6 +66,8 @@ import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import androidx.core.graphics.toColorInt
+import com.example.sustavzainstrukcije.ui.data.ToolMode
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -95,6 +100,10 @@ fun WhiteboardScreen(
     var showEraseModePopup by remember { mutableStateOf(false) }
 
     var showStrokeWidthPopup by remember { mutableStateOf(false) }
+
+    val toolMode by whiteboardViewModel.toolMode.collectAsState()
+
+    var showToolSelector by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -211,6 +220,9 @@ fun WhiteboardScreen(
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
+                IconButton(onClick = { showToolSelector = true }) {
+                    Icon(Icons.Default.Create, contentDescription = "Odaberi alat")
+                }
             } else {
                 // Gumica
                 IconButton(onClick = { showEraseModePopup = true }) {
@@ -299,15 +311,24 @@ fun WhiteboardScreen(
                     .pointerInput(isEraser, eraserMode) {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height) {
-                                    return@detectDragGestures
-                                }
-                                if (isEraser && eraserMode == EraseMode.STROKE) return@detectDragGestures // Preskoči za stroke gumicu
-                                currentPath = Path().apply { moveTo(offset.x, offset.y) }
+                                if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height) return@detectDragGestures
+
                                 currentPoints = listOf(Point(offset.x, offset.y))
+
+                                if (isEraser && eraserMode == EraseMode.STROKE) return@detectDragGestures
+
+                                if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
+                                    currentPath = Path().apply { moveTo(offset.x, offset.y) }
+                                }
                             },
                             onDrag = { change, _ ->
                                 val newPoint = Point(change.position.x, change.position.y)
+
+                                // Za oblike: uvijek čuvamo početnu i krajnju točku
+                                if (toolMode == ToolMode.SHAPE_RECT || toolMode == ToolMode.SHAPE_CIRCLE || toolMode == ToolMode.SHAPE_LINE) {
+                                    currentPoints = listOf(currentPoints.firstOrNull() ?: newPoint, newPoint)
+                                    return@detectDragGestures
+                                }
 
                                 when {
                                     isEraser && eraserMode == EraseMode.STROKE -> {
@@ -327,7 +348,7 @@ fun WhiteboardScreen(
                                         currentPath.lineTo(newPoint.x, newPoint.y)
                                     }
 
-                                    else -> {
+                                    toolMode == ToolMode.DRAW -> {
                                         currentPoints = currentPoints + newPoint
                                         currentPath.lineTo(newPoint.x, newPoint.y)
                                     }
@@ -335,26 +356,36 @@ fun WhiteboardScreen(
                             },
 
                             onDragEnd = {
-                                if (currentPoints.isNotEmpty()) {
-                                    if (!isEraser || eraserMode == EraseMode.COLOR) {
-                                        val strokeColor = if (isEraser) {
-                                            String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
-                                        } else {
-                                            String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
-                                        }
+                                val shouldAdd = when {
+                                    toolMode == ToolMode.DRAW && currentPoints.size > 1 -> true
+                                    toolMode in listOf(ToolMode.SHAPE_LINE, ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE) && currentPoints.size == 2 -> true
+                                    isEraser && eraserMode == EraseMode.COLOR && currentPoints.size > 1 -> true
+                                    else -> false
+                                }
 
-                                        val strokeWidthToUse = if (isEraser) {
-                                            eraserWidth
-                                        } else {
-                                            strokeWidth
-                                        }
-
-                                        whiteboardViewModel.addStroke(
-                                            points = currentPoints,
-                                            color = strokeColor,
-                                            strokeWidth = strokeWidthToUse
-                                        )
+                                if (shouldAdd) {
+                                    val strokeColor = if (isEraser) {
+                                        String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
+                                    } else {
+                                        String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
                                     }
+
+                                    val strokeWidthToUse =
+                                        if (isEraser) eraserWidth else strokeWidth
+
+                                    val shapeType = when (toolMode) {
+                                        ToolMode.SHAPE_RECT -> "rect"
+                                        ToolMode.SHAPE_CIRCLE -> "circle"
+                                        ToolMode.SHAPE_LINE -> "line"
+                                        else -> null
+                                    }
+
+                                    whiteboardViewModel.addStroke(
+                                        points = currentPoints,
+                                        color = strokeColor,
+                                        strokeWidth = strokeWidthToUse,
+                                        shapeType = shapeType
+                                    )
                                 }
 
                                 currentPoints = emptyList()
@@ -369,28 +400,69 @@ fun WhiteboardScreen(
                 strokes.forEach { stroke ->
                     if (stroke.points.isNotEmpty()) {
                         val color = Color(stroke.color.toColorInt())
-                        if (stroke.points.size == 1) {
-                            val point = stroke.points.first()
-                            drawCircle(
-                                color = color,
-                                radius = stroke.strokeWidth / 2f,
-                                center = Offset(point.x, point.y)
-                            )
-                        } else {
-                            val path = Path()
-                            path.moveTo(stroke.points.first().x, stroke.points.first().y)
-                            stroke.points.drop(1).forEach { point ->
-                                path.lineTo(point.x, point.y)
-                            }
-                            drawPath(
-                                path = path,
-                                color = color,
-                                style = Stroke(
-                                    width = stroke.strokeWidth,
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
+                        when {
+                            stroke.points.size == 1 -> {
+                                val point = stroke.points.first()
+                                drawCircle(
+                                    color = color,
+                                    radius = stroke.strokeWidth / 2f,
+                                    center = Offset(point.x, point.y)
                                 )
-                            )
+                            }
+
+                            stroke.points.size == 2 && stroke.shapeType != null -> {
+                                val p1 = Offset(stroke.points[0].x, stroke.points[0].y)
+                                val p2 = Offset(stroke.points[1].x, stroke.points[1].y)
+
+                                when (stroke.shapeType) {
+                                    "rect" -> drawRect(
+                                        color = color,
+                                        topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
+                                        size = androidx.compose.ui.geometry.Size(
+                                            width = kotlin.math.abs(p2.x - p1.x),
+                                            height = kotlin.math.abs(p2.y - p1.y)
+                                        ),
+                                        style = Stroke(width = stroke.strokeWidth)
+                                    )
+
+                                    "circle" -> {
+                                        val radius =
+                                            sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
+                                        val center = Offset((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+                                        drawCircle(
+                                            color = color,
+                                            radius = radius,
+                                            center = center,
+                                            style = Stroke(width = stroke.strokeWidth)
+                                        )
+                                    }
+
+                                    "line" -> drawLine(
+                                        color = color,
+                                        start = p1,
+                                        end = p2,
+                                        strokeWidth = stroke.strokeWidth,
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
+                            stroke.shapeType == null && stroke.points.size > 1 -> {
+                                val path = Path().apply {
+                                    moveTo(stroke.points[0].x, stroke.points[0].y)
+                                    for (point in stroke.points.drop(1)) {
+                                        lineTo(point.x, point.y)
+                                    }
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = color,
+                                    style = Stroke(
+                                        width = stroke.strokeWidth,
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -424,6 +496,44 @@ fun WhiteboardScreen(
                             join = StrokeJoin.Round
                         )
                     )
+                }
+
+                if (currentPoints.size == 2 && !isEraser) {
+                    val p1 = Offset(currentPoints[0].x, currentPoints[0].y)
+                    val p2 = Offset(currentPoints[1].x, currentPoints[1].y)
+
+                    when (toolMode) {
+                        ToolMode.SHAPE_RECT -> drawRect(
+                            color = colorToUse,
+                            topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
+                            size = androidx.compose.ui.geometry.Size(
+                                width = kotlin.math.abs(p2.x - p1.x),
+                                height = kotlin.math.abs(p2.y - p1.y)
+                            ),
+                            style = Stroke(width = strokeWidth)
+                        )
+
+                        ToolMode.SHAPE_LINE -> drawLine(
+                            color = colorToUse,
+                            start = p1,
+                            end = p2,
+                            strokeWidth = strokeWidth,
+                            cap = StrokeCap.Round
+                        )
+
+                        ToolMode.SHAPE_CIRCLE -> {
+                            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
+                            val center = Offset((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+                            drawCircle(
+                                color = colorToUse,
+                                radius = radius,
+                                center = center,
+                                style = Stroke(width = strokeWidth)
+                            )
+                        }
+
+                        else -> {}
+                    }
                 }
 
             }
@@ -506,6 +616,46 @@ fun WhiteboardScreen(
                 confirmButton = {
                     TextButton(onClick = { showStrokeWidthPopup = false }) {
                         Text("Gotovo")
+                    }
+                }
+            )
+        }
+
+        if (showToolSelector) {
+            AlertDialog(
+                onDismissRequest = { showToolSelector = false },
+                title = { Text("Odaberi alat") },
+                text = {
+                    Column {
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.DRAW)
+                            showToolSelector = false
+                        }) { Text("Olovka") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_RECT)
+                            showToolSelector = false
+                        }) { Text("Pravokutnik") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_CIRCLE)
+                            showToolSelector = false
+                        }) { Text("Krug") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.SHAPE_LINE)
+                            showToolSelector = false
+                        }) { Text("Linija") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.DRAW)
+                            showToolSelector = false
+                        }) { Text("Poništi odabir") }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showToolSelector = false }) {
+                        Text("Zatvori")
                     }
                 }
             )

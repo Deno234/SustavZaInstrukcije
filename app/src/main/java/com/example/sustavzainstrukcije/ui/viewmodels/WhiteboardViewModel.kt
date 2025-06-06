@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import com.example.sustavzainstrukcije.ui.data.DrawingStroke
 import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
+import com.example.sustavzainstrukcije.ui.data.ToolMode
 import com.example.sustavzainstrukcije.ui.data.WhiteboardPage
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
@@ -51,6 +52,13 @@ class WhiteboardViewModel : ViewModel() {
 
     private val userUndoStacks = mutableMapOf<String, ArrayDeque<DrawingStroke>>()
     private val userRedoStacks = mutableMapOf<String, ArrayDeque<DrawingStroke>>()
+
+    private val _toolMode = MutableStateFlow(ToolMode.DRAW)
+    val toolMode: StateFlow<ToolMode> = _toolMode.asStateFlow()
+
+    fun setToolMode(mode: ToolMode) {
+        _toolMode.value = mode
+    }
 
     fun initializeWhiteboard(sessionId: String) {
         if (initializedSessions.contains(sessionId)) {
@@ -160,7 +168,8 @@ class WhiteboardViewModel : ViewModel() {
                             points = points,
                             color = data["color"] as? String ?: "#000000",
                             strokeWidth = (data["strokeWidth"] as? Number)?.toFloat() ?: 5f,
-                            timestamp = (data["timestamp"] as? Number)?.toLong() ?: 0L
+                            timestamp = (data["timestamp"] as? Number)?.toLong() ?: 0L,
+                            shapeType = data["shapeType"] as? String
                         )
                     } catch (e: Exception) {
                         Log.e("WhiteboardViewModel", "Error parsing stroke: ${e.message}", e)
@@ -176,7 +185,7 @@ class WhiteboardViewModel : ViewModel() {
 
 
 
-    fun addStroke(points: List<Point>, color: String, strokeWidth: Float) {
+    fun addStroke(points: List<Point>, color: String, strokeWidth: Float, shapeType: String? = null) {
         val currentUserId = auth.currentUser?.uid ?: return
         val pageId = _currentPage.value?.id ?: return
 
@@ -191,7 +200,8 @@ class WhiteboardViewModel : ViewModel() {
             userId = currentUserId,
             points = points,
             color = color,
-            strokeWidth = strokeWidth
+            strokeWidth = strokeWidth,
+            shapeType = shapeType
         )
 
         val strokeData = mapOf(
@@ -201,7 +211,8 @@ class WhiteboardViewModel : ViewModel() {
             "color" to color,
             "strokeWidth" to strokeWidth,
             "timestamp" to System.currentTimeMillis(),
-            "pageId" to pageId
+            "pageId" to pageId,
+            "shapeType" to shapeType
         )
 
         userUndoStacks[currentUserId]?.addLast(stroke)
@@ -262,6 +273,7 @@ class WhiteboardViewModel : ViewModel() {
     fun toggleEraser() {
         _isEraserActive.value = !_isEraserActive.value
         if (_isEraserActive.value) _eraseMode.value = EraseMode.COLOR
+        else _toolMode.value = ToolMode.DRAW
     }
 
     fun setEraseMode(mode: EraseMode) {
@@ -310,7 +322,8 @@ class WhiteboardViewModel : ViewModel() {
             "color" to redoAction.color,
             "strokeWidth" to redoAction.strokeWidth,
             "timestamp" to redoAction.timestamp,
-            "pageId" to _currentPage.value?.id ?: return
+            ("pageId" to _currentPage.value?.id),
+            "shapeType" to redoAction.shapeType
         )
 
         firestore.collection("drawing_strokes").document(redoAction.id)

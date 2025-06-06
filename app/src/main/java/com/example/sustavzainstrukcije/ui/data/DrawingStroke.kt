@@ -6,5 +6,6 @@ data class DrawingStroke(
     val points: List<Point> = emptyList(),
     val color: String = "#000000",
     val strokeWidth: Float = 5f,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val shapeType: String? = null
 )
