@@ -21,10 +21,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -117,6 +119,8 @@ fun WhiteboardScreen(
 
     var showRenameDialog by remember { mutableStateOf(false) }
 
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
     }
@@ -152,7 +156,12 @@ fun WhiteboardScreen(
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Natrag")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Natrag")
+                }
+            },
+            actions = {
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Obriši stranicu")
                 }
             }
         )
@@ -787,6 +796,27 @@ fun WhiteboardScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showRenameDialog = false }) { Text("Odustani") }
+                }
+            )
+        }
+
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text("Brisanje stranice") },
+                text = { Text("Jeste li sigurni da želite obrisati ovu stranicu?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        whiteboardViewModel.deleteCurrentPage()
+                        showDeleteDialog = false
+                    }) {
+                        Text("Obriši")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text("Odustani")
+                    }
                 }
             )
         }

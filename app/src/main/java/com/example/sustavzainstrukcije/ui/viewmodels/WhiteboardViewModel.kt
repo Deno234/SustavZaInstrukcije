@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 import kotlin.math.hypot
+import kotlin.math.max
 
 class WhiteboardViewModel : ViewModel() {
     private val db = Firebase.database
@@ -363,7 +364,7 @@ class WhiteboardViewModel : ViewModel() {
         firestore.collection("whiteboard_pages").document(pageId)
             .update("title", newTitle)
             .addOnSuccessListener {
-                // Ažuriraj lokalno
+                // Ažuriranje lokalno
                 val updatedPages = _allPages.value.map {
                     if (it.id == pageId) it.copy(title = newTitle) else it
                 }
@@ -375,6 +376,51 @@ class WhiteboardViewModel : ViewModel() {
                 }
             }
     }
+
+    fun deleteCurrentPage() {
+        val page = _currentPage.value ?: return
+        val pageId = page.id
+        val sessionId = page.sessionId
+        val userId = Firebase.auth.currentUser?.uid ?: return
+        val pageNumberToRemove = page.pageNumber
+
+        // Prvo se obrišu svi stroke-ovi na toj stranici
+        firestore.collection("drawing_strokes")
+            .whereEqualTo("pageId", pageId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                snapshot.documents.forEach { it.reference.delete() }
+
+                // Brisanje same stranice
+                firestore.collection("whiteboard_pages").document(pageId)
+                    .delete()
+                    .addOnSuccessListener {
+                        Log.d("Whiteboard", "Stranica obrisana")
+
+                        // Ažuriranje page brojeva stranica koje su bile iza nje
+                        firestore.collection("whiteboard_pages")
+                            .whereEqualTo("sessionId", sessionId)
+                            .get()
+                            .addOnSuccessListener { allPagesSnapshot ->
+                                val pagesToUpdate = allPagesSnapshot.documents
+                                    .mapNotNull { doc ->
+                                        val number = doc.getLong("pageNumber")?.toInt() ?: return@mapNotNull null
+                                        if (number > pageNumberToRemove) doc to number else null
+                                    }
+
+                                for ((doc, oldNumber) in pagesToUpdate) {
+                                    doc.reference.update("pageNumber", oldNumber - 1)
+                                }
+
+                                // Ponovno učitavanje lista
+                                listenToAllPages(sessionId)
+                            }
+                    }
+            }
+    }
+
+
+
 
 
 
