@@ -50,8 +50,10 @@ class WhiteboardViewModel : ViewModel() {
     val eraserSize: StateFlow<Float> = _eraserSize.asStateFlow()
     fun setEraserSize(size: Float) { _eraserSize.value = size }
 
-    private val userUndoStacks = mutableMapOf<String, ArrayDeque<DrawingStroke>>()
-    private val userRedoStacks = mutableMapOf<String, ArrayDeque<DrawingStroke>>()
+    private val undoStacks = mutableMapOf<String, ArrayDeque<StrokeAction>>()
+    private val redoStacks = mutableMapOf<String, ArrayDeque<StrokeAction>>()
+
+    private fun stackKey(userId: String, pageId: String) = "$userId:$pageId"
 
     private val _toolMode = MutableStateFlow(ToolMode.DRAW)
     val toolMode: StateFlow<ToolMode> = _toolMode.asStateFlow()
@@ -188,11 +190,7 @@ class WhiteboardViewModel : ViewModel() {
     fun addStroke(points: List<Point>, color: String, strokeWidth: Float, shapeType: String? = null) {
         val currentUserId = auth.currentUser?.uid ?: return
         val pageId = _currentPage.value?.id ?: return
-
-        userUndoStacks.getOrPut(currentUserId) { ArrayDeque() }
-        userRedoStacks.getOrPut(currentUserId) { ArrayDeque() }
-
-        userRedoStacks[currentUserId]?.clear()
+        val key = stackKey(currentUserId, pageId)
 
         val strokeId = UUID.randomUUID().toString()
         val stroke = DrawingStroke(
@@ -215,7 +213,9 @@ class WhiteboardViewModel : ViewModel() {
             "shapeType" to shapeType
         )
 
-        userUndoStacks[currentUserId]?.addLast(stroke)
+        undoStacks.getOrPut(key) { ArrayDeque() }.addLast(StrokeAction.Add(stroke))
+        redoStacks.getOrPut(key) { ArrayDeque() }.clear()
+
 
         firestore.collection("drawing_strokes").document(strokeId)
             .set(strokeData)
@@ -282,53 +282,68 @@ class WhiteboardViewModel : ViewModel() {
 
     fun removeStroke(strokeId: String) {
         val currentUserId = auth.currentUser?.uid ?: return
+        val pageId = _currentPage.value?.id ?: return
+        val key = stackKey(currentUserId, pageId)
 
         val stroke = _strokes.value.find { it.id == strokeId } ?: return
 
-        // Track undo
-        userUndoStacks.getOrPut(currentUserId) { ArrayDeque() }
-        userRedoStacks.getOrPut(currentUserId) { ArrayDeque() }
-        userUndoStacks[currentUserId]?.addLast(stroke)
-        userRedoStacks[currentUserId]?.clear()
+        undoStacks.getOrPut(key) { ArrayDeque() }.addLast(StrokeAction.Remove(stroke))
+        redoStacks.getOrPut(key) { ArrayDeque() }.clear()
 
         _strokes.value = _strokes.value.filter { it.id != strokeId }
         firestore.collection("drawing_strokes").document(strokeId).delete()
     }
 
+
     fun undo() {
         val currentUserId = auth.currentUser?.uid ?: return
-        val undoStack = userUndoStacks[currentUserId] ?: return
+        val pageId = _currentPage.value?.id ?: return
+        val key = stackKey(currentUserId, pageId)
+
+        val undoStack = undoStacks[key] ?: return
         if (undoStack.isEmpty()) return
 
-        val lastAction = undoStack.removeLast()
-        userRedoStacks[currentUserId]?.addLast(lastAction)
+        val action = undoStack.removeLast()
+        redoStacks.getOrPut(key) { ArrayDeque() }.addLast(action)
 
-        // Remove the stroke from Firestore
-        firestore.collection("drawing_strokes").document(lastAction.id).delete()
+        when (action) {
+            is StrokeAction.Add -> {
+                // Undo ADD => REMOVE stroke
+                firestore.collection("drawing_strokes").document(action.stroke.id).delete()
+            }
+            is StrokeAction.Remove -> {
+                // Undo REMOVE => RE-ADD stroke
+                val stroke = action.stroke
+                val strokeData = stroke.toMap() + mapOf("id" to stroke.id, "pageId" to pageId)
+                firestore.collection("drawing_strokes").document(stroke.id).set(strokeData)
+            }
+        }
     }
+
 
     fun redo() {
         val currentUserId = auth.currentUser?.uid ?: return
-        val redoStack = userRedoStacks[currentUserId] ?: return
+        val pageId = _currentPage.value?.id ?: return
+        val key = stackKey(currentUserId, pageId)
+
+        val redoStack = redoStacks[key] ?: return
         if (redoStack.isEmpty()) return
 
-        val redoAction = redoStack.removeLast()
-        userUndoStacks[currentUserId]?.addLast(redoAction)
+        val action = redoStack.removeLast()
+        undoStacks.getOrPut(key) { ArrayDeque() }.addLast(action)
 
-        val strokeData = mapOf(
-            "id" to redoAction.id,
-            "userId" to redoAction.userId,
-            "points" to redoAction.points.map { mapOf("x" to it.x, "y" to it.y) },
-            "color" to redoAction.color,
-            "strokeWidth" to redoAction.strokeWidth,
-            "timestamp" to redoAction.timestamp,
-            ("pageId" to _currentPage.value?.id),
-            "shapeType" to redoAction.shapeType
-        )
-
-        firestore.collection("drawing_strokes").document(redoAction.id)
-            .set(strokeData)
+        when (action) {
+            is StrokeAction.Add -> {
+                val stroke = action.stroke
+                val strokeData = stroke.toMap() + mapOf("id" to stroke.id, "pageId" to pageId)
+                firestore.collection("drawing_strokes").document(stroke.id).set(strokeData)
+            }
+            is StrokeAction.Remove -> {
+                firestore.collection("drawing_strokes").document(action.stroke.id).delete()
+            }
+        }
     }
+
 
 
     fun findStrokeAtPosition(x: Float, y: Float): DrawingStroke? {
@@ -353,11 +368,22 @@ class WhiteboardViewModel : ViewModel() {
 
 // Extension funkcija za konverziju u Map
 fun DrawingStroke.toMap(): Map<String, Any> {
-    return mapOf(
+    val map = mutableMapOf(
         "userId" to userId,
         "points" to points.map { mapOf("x" to it.x, "y" to it.y) },
         "color" to color,
         "strokeWidth" to strokeWidth,
         "timestamp" to timestamp
     )
+
+    shapeType?.let { map["shapeType"] = it }
+
+    return map
+}
+
+
+
+sealed class StrokeAction {
+    data class Add(val stroke: DrawingStroke) : StrokeAction()
+    data class Remove(val stroke: DrawingStroke) : StrokeAction()
 }
