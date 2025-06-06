@@ -55,10 +55,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColor
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.R
@@ -104,6 +106,10 @@ fun WhiteboardScreen(
     val toolMode by whiteboardViewModel.toolMode.collectAsState()
 
     var showToolSelector by remember { mutableStateOf(false) }
+
+    var showTextInputDialog by remember { mutableStateOf(false) }
+    var textInput by remember { mutableStateOf("") }
+    var textInputOffset by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -298,13 +304,18 @@ fun WhiteboardScreen(
                                 }
                                 strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
                             } else if (!isEraser) {
-                                // Normalni tap za crtanje točke
-                                val singlePoint = listOf(Point(offset.x, offset.y))
-                                whiteboardViewModel.addStroke(
-                                    points = singlePoint,
-                                    color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
-                                    strokeWidth = strokeWidth
-                                )
+                                if (toolMode == ToolMode.TEXT) {
+                                    showTextInputDialog = true
+                                    textInputOffset = offset
+                                } else {
+                                    // Normalni tap za crtanje točke
+                                    val singlePoint = listOf(Point(offset.x, offset.y))
+                                    whiteboardViewModel.addStroke(
+                                        points = singlePoint,
+                                        color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                                        strokeWidth = strokeWidth
+                                    )
+                                }
                             }
                         }
                     }
@@ -401,6 +412,20 @@ fun WhiteboardScreen(
                     if (stroke.points.isNotEmpty()) {
                         val color = Color(stroke.color.toColorInt())
                         when {
+                            stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
+                                val text = stroke.shapeType.substringAfter("text:")
+                                drawContext.canvas.nativeCanvas.drawText(
+                                    text,
+                                    stroke.points[0].x,
+                                    stroke.points[0].y,
+                                    android.graphics.Paint().apply {
+                                        this.color = stroke.color.toColorInt()
+                                        textSize = stroke.strokeWidth * 6 
+                                        isAntiAlias = true
+                                    }
+                                )
+                            }
+
                             stroke.points.size == 1 -> {
                                 val point = stroke.points.first()
                                 drawCircle(
@@ -446,6 +471,7 @@ fun WhiteboardScreen(
                                     )
                                 }
                             }
+
                             stroke.shapeType == null && stroke.points.size > 1 -> {
                                 val path = Path().apply {
                                     moveTo(stroke.points[0].x, stroke.points[0].y)
@@ -648,6 +674,11 @@ fun WhiteboardScreen(
                         }) { Text("Linija") }
 
                         TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.TEXT)
+                            showToolSelector = false
+                        }) { Text("Tekst") }
+
+                        TextButton(onClick = {
                             whiteboardViewModel.setToolMode(ToolMode.DRAW)
                             showToolSelector = false
                         }) { Text("Poništi odabir") }
@@ -660,6 +691,46 @@ fun WhiteboardScreen(
                 }
             )
         }
+
+        if (showTextInputDialog) {
+            AlertDialog(
+                onDismissRequest = { showTextInputDialog = false },
+                title = { Text("Unesi tekst") },
+                text = {
+                    Column {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = textInput,
+                            onValueChange = { textInput = it },
+                            label = { Text("Tekst") }
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val textPoint = listOf(Point(textInputOffset.x, textInputOffset.y))
+                        whiteboardViewModel.addStroke(
+                            points = textPoint,
+                            color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                            strokeWidth = strokeWidth,
+                            shapeType = "text:$textInput"
+                        )
+                        showTextInputDialog = false
+                        textInput = ""
+                    }) {
+                        Text("Dodaj")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showTextInputDialog = false
+                        textInput = ""
+                    }) {
+                        Text("Odustani")
+                    }
+                }
+            )
+        }
+
 
     }
 
