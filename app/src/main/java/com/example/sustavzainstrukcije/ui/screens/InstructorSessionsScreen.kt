@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -32,15 +33,15 @@ fun InstructorSessionsScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         // Top Bar
         TopAppBar(
-            title = { Text("Moji Sessioni") },
+            title = { Text("My Sessions") },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Natrag")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Go back")
                 }
             },
             actions = {
                 IconButton(onClick = { navController.navigate("create_session") }) {
-                    Icon(Icons.Default.Add, contentDescription = "Kreiraj session")
+                    Icon(Icons.Default.Add, contentDescription = "Create session")
                 }
             }
         )
@@ -56,14 +57,14 @@ fun InstructorSessionsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "Nema kreiranih sessiona",
+                        text = "No created sessions",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Button(
                         onClick = { navController.navigate("create_session") }
                     ) {
-                        Text("Kreiraj prvi session")
+                        Text("Create first session")
                     }
                 }
             }
@@ -74,7 +75,7 @@ fun InstructorSessionsScreen(
             ) {
                 item {
                     Text(
-                        text = "Ukupno sessiona: ${sessions.size}",
+                        text = "Total sessions: ${sessions.size}",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -110,7 +111,7 @@ fun SessionCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Predmet: ${session.subject}",
+                text = "Subject: ${session.subject}",
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -148,7 +149,7 @@ fun SessionCard(
                             onClick = onContinueClick,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Nastavi session")
+                            Text("Enter Session")
                         }
                     }
                     "pending" -> {
@@ -156,7 +157,7 @@ fun SessionCard(
                             onClick = onJoinClick,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Pokreni session")
+                            Text("Start Session")
                         }
                     }
                     "completed" -> {
@@ -164,7 +165,7 @@ fun SessionCard(
                             onClick = onContinueClick,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Pregledaj session")
+                            Text("Review Session")
                         }
                     }
                 }

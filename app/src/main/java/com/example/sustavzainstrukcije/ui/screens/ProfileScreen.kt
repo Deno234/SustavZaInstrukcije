@@ -35,12 +35,17 @@ fun ProfileScreen(
     authViewModel: AuthViewModel = viewModel(),
 ) {
     val currentUser by authViewModel.userData.collectAsState()
-    var name by remember { mutableStateOf(currentUser?.name ?: "") }
-    var subjects by remember { mutableStateOf(currentUser?.subjects ?: listOf()) }
-    var availableHours by remember { mutableStateOf(currentUser?.availableHours ?: emptyMap()) }
+    var name by remember { mutableStateOf("") }
+    var subjects by remember { mutableStateOf(listOf<String>()) }
+    var availableHours by remember { mutableStateOf(emptyMap<String, List<String>>()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUser) {
         authViewModel.fetchCurrentUserData()
+        currentUser?.let { user ->
+            name = user.name
+            subjects = user.subjects
+            availableHours = user.availableHours
+        }
     }
 
     if (currentUser == null) {

@@ -138,10 +138,5 @@ fun NavGraph(
                 Text("Greška: Session ID nedostaje.")
             }
         }
-
-        /*
-        composable("otherInstructors") {
-            OtherInstructorsScreen()
-        }*/
     }
 }

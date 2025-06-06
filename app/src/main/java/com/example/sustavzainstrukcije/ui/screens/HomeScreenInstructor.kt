@@ -12,8 +12,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -25,7 +23,6 @@ import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 @Composable
 fun HomeScreenInstructor(navController: NavHostController, instructorId: String?, authViewModel: AuthViewModel = viewModel(), sessionViewModel: SessionViewModel = viewModel()) {
     Log.d("HomeScreenInstructor", "Instructor id: $instructorId")
-    val sessions by sessionViewModel.sessions.collectAsState()
 
     LaunchedEffect(Unit) {
         sessionViewModel.getInstructorSessions()
@@ -37,19 +34,6 @@ fun HomeScreenInstructor(navController: NavHostController, instructorId: String?
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
     ) {
-        Button(
-            onClick = { navController.navigate("instructor_sessions") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Moji Sessioni")
-        }
-
-        Button(
-            onClick = { navController.navigate("create_session") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Kreiraj novi session")
-        }
 
         Button(
             onClick = { navController.navigate("profile") },
@@ -59,10 +43,10 @@ fun HomeScreenInstructor(navController: NavHostController, instructorId: String?
         }
 
         Button(
-            onClick = { navController.navigate("appointments") },
+            onClick = { navController.navigate("instructor_sessions") },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("My Appointments")
+            Text("My Sessions")
         }
 
         Button(
@@ -70,13 +54,6 @@ fun HomeScreenInstructor(navController: NavHostController, instructorId: String?
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("My Messages")
-        }
-
-        Button(
-            onClick = { navController.navigate("otherInstructors") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Other Instructors")
         }
 
         Button(
