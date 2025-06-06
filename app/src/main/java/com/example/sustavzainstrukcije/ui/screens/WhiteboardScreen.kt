@@ -238,6 +238,21 @@ fun WhiteboardScreen(
                     )
                 }
             }
+
+            IconButton(onClick = { whiteboardViewModel.undo() }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_notification),
+                    contentDescription = "Undo"
+                )
+            }
+
+            IconButton(onClick = { whiteboardViewModel.redo() }) {
+                Icon(
+                    painter = painterResource(R.drawable.nikola_tesla),
+                    contentDescription = "Redo"
+                )
+            }
+
         }
 
 

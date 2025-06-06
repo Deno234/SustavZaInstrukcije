@@ -49,6 +49,9 @@ class WhiteboardViewModel : ViewModel() {
     val eraserSize: StateFlow<Float> = _eraserSize.asStateFlow()
     fun setEraserSize(size: Float) { _eraserSize.value = size }
 
+    private val userUndoStacks = mutableMapOf<String, ArrayDeque<DrawingStroke>>()
+    private val userRedoStacks = mutableMapOf<String, ArrayDeque<DrawingStroke>>()
+
     fun initializeWhiteboard(sessionId: String) {
         if (initializedSessions.contains(sessionId)) {
             Log.d("WhiteboardViewModel", "Already initialized for session: $sessionId")
@@ -177,6 +180,11 @@ class WhiteboardViewModel : ViewModel() {
         val currentUserId = auth.currentUser?.uid ?: return
         val pageId = _currentPage.value?.id ?: return
 
+        userUndoStacks.getOrPut(currentUserId) { ArrayDeque() }
+        userRedoStacks.getOrPut(currentUserId) { ArrayDeque() }
+
+        userRedoStacks[currentUserId]?.clear()
+
         val strokeId = UUID.randomUUID().toString()
         val stroke = DrawingStroke(
             id = strokeId,
@@ -195,6 +203,8 @@ class WhiteboardViewModel : ViewModel() {
             "timestamp" to System.currentTimeMillis(),
             "pageId" to pageId
         )
+
+        userUndoStacks[currentUserId]?.addLast(stroke)
 
         firestore.collection("drawing_strokes").document(strokeId)
             .set(strokeData)
@@ -259,9 +269,54 @@ class WhiteboardViewModel : ViewModel() {
     }
 
     fun removeStroke(strokeId: String) {
+        val currentUserId = auth.currentUser?.uid ?: return
+
+        val stroke = _strokes.value.find { it.id == strokeId } ?: return
+
+        // Track undo
+        userUndoStacks.getOrPut(currentUserId) { ArrayDeque() }
+        userRedoStacks.getOrPut(currentUserId) { ArrayDeque() }
+        userUndoStacks[currentUserId]?.addLast(stroke)
+        userRedoStacks[currentUserId]?.clear()
+
         _strokes.value = _strokes.value.filter { it.id != strokeId }
         firestore.collection("drawing_strokes").document(strokeId).delete()
     }
+
+    fun undo() {
+        val currentUserId = auth.currentUser?.uid ?: return
+        val undoStack = userUndoStacks[currentUserId] ?: return
+        if (undoStack.isEmpty()) return
+
+        val lastAction = undoStack.removeLast()
+        userRedoStacks[currentUserId]?.addLast(lastAction)
+
+        // Remove the stroke from Firestore
+        firestore.collection("drawing_strokes").document(lastAction.id).delete()
+    }
+
+    fun redo() {
+        val currentUserId = auth.currentUser?.uid ?: return
+        val redoStack = userRedoStacks[currentUserId] ?: return
+        if (redoStack.isEmpty()) return
+
+        val redoAction = redoStack.removeLast()
+        userUndoStacks[currentUserId]?.addLast(redoAction)
+
+        val strokeData = mapOf(
+            "id" to redoAction.id,
+            "userId" to redoAction.userId,
+            "points" to redoAction.points.map { mapOf("x" to it.x, "y" to it.y) },
+            "color" to redoAction.color,
+            "strokeWidth" to redoAction.strokeWidth,
+            "timestamp" to redoAction.timestamp,
+            "pageId" to _currentPage.value?.id ?: return
+        )
+
+        firestore.collection("drawing_strokes").document(redoAction.id)
+            .set(strokeData)
+    }
+
 
     fun findStrokeAtPosition(x: Float, y: Float): DrawingStroke? {
         return _strokes.value.firstOrNull { stroke ->
