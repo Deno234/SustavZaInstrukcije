@@ -61,10 +61,12 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.R
+import com.example.sustavzainstrukcije.ui.data.DrawingStroke
 import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.ToolMode
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -109,6 +111,8 @@ fun WhiteboardScreen(
 
     var textFontSize by remember { mutableStateOf(16f) }
     var isTextBold by remember { mutableStateOf(false) }
+
+    val erasedStrokeIds = mutableSetOf<String>()
 
     LaunchedEffect(sessionId) {
         whiteboardViewModel.initializeWhiteboard(sessionId)
@@ -292,15 +296,7 @@ fun WhiteboardScreen(
                             }
                             if (isEraser && eraserMode == EraseMode.STROKE) {
                                 // Pronađi i obriši stroke na toj poziciji
-                                val strokeToRemove = strokes.lastOrNull { stroke ->
-                                    // Preskoči stroke-ove koji su bijeli (gumica bojom)
-                                    if (stroke.color == "#FFFFFF") return@lastOrNull false
-                                    stroke.points.any { point ->
-                                        val dx = point.x - offset.x
-                                        val dy = point.y - offset.y
-                                        sqrt(dx * dx + dy * dy) < eraserWidth / 2
-                                    }
-                                }
+                                val strokeToRemove = strokes.lastOrNull { isTouchingStroke(it, offset.x, offset.y) }
                                 strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
                             } else if (!isEraser) {
                                 if (toolMode == ToolMode.TEXT) {
@@ -325,7 +321,23 @@ fun WhiteboardScreen(
 
                                 currentPoints = listOf(Point(offset.x, offset.y))
 
-                                if (isEraser && eraserMode == EraseMode.STROKE) return@detectDragGestures
+                                if (isEraser && eraserMode == EraseMode.STROKE) {
+                                    val strokeToRemove = strokes.lastOrNull { stroke ->
+                                        if (stroke.color == "#FFFFFF") return@lastOrNull false
+                                        stroke.points.any { point ->
+                                            val dx = point.x - offset.x
+                                            val dy = point.y - offset.y
+                                            sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                        }
+                                    }
+                                    strokeToRemove?.let {
+                                        whiteboardViewModel.removeStroke(it.id)
+                                    }
+
+                                    // Prekini dalje procesiranje draga za STROKE brisanje
+                                    return@detectDragGestures
+                                }
+
 
                                 if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
                                     currentPath = Path().apply { moveTo(offset.x, offset.y) }
@@ -341,18 +353,6 @@ fun WhiteboardScreen(
                                 }
 
                                 when {
-                                    isEraser && eraserMode == EraseMode.STROKE -> {
-                                        val strokeToRemove = strokes.lastOrNull { stroke ->
-                                            if (stroke.color == "#FFFFFF") return@lastOrNull false
-                                            stroke.points.any { point ->
-                                                val dx = point.x - newPoint.x
-                                                val dy = point.y - newPoint.y
-                                                sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
-                                            }
-                                        }
-                                        strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
-                                    }
-
                                     isEraser && eraserMode == EraseMode.COLOR -> {
                                         currentPoints = currentPoints + newPoint
                                         currentPath.lineTo(newPoint.x, newPoint.y)
@@ -839,5 +839,71 @@ fun ColorPickerDialog(
         }
     )
 }
+
+fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
+    if (stroke.color == "#FFFFFF") return false
+
+    return when {
+        stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
+            val textX = stroke.points[0].x
+            val textY = stroke.points[0].y
+            val fontSize = stroke.shapeType.substringAfter("font=")
+                .substringBefore(";")
+                .toFloatOrNull() ?: (stroke.strokeWidth * 6)
+            val tolerance = fontSize
+            abs(x - textX) < tolerance * 4 && abs(y - textY) < tolerance // okvir teksta
+        }
+
+        stroke.shapeType == "circle" && stroke.points.size == 2 -> {
+            val p1 = stroke.points[0]
+            val p2 = stroke.points[1]
+            val centerX = (p1.x + p2.x) / 2
+            val centerY = (p1.y + p2.y) / 2
+            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2
+            val distance = sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
+            abs(distance - radius) < stroke.strokeWidth * 1.5f
+        }
+
+        stroke.shapeType == "rect" && stroke.points.size == 2 -> {
+            val left = minOf(stroke.points[0].x, stroke.points[1].x)
+            val right = maxOf(stroke.points[0].x, stroke.points[1].x)
+            val top = minOf(stroke.points[0].y, stroke.points[1].y)
+            val bottom = maxOf(stroke.points[0].y, stroke.points[1].y)
+            val border = stroke.strokeWidth * 1.5f
+
+            val isNearLeft = abs(x - left) < border && y in top..bottom
+            val isNearRight = abs(x - right) < border && y in top..bottom
+            val isNearTop = abs(y - top) < border && x in left..right
+            val isNearBottom = abs(y - bottom) < border && x in left..right
+
+            isNearLeft || isNearRight || isNearTop || isNearBottom
+        }
+
+        stroke.shapeType == "line" && stroke.points.size == 2 -> {
+            val (x1, y1) = stroke.points[0]
+            val (x2, y2) = stroke.points[1]
+            val lineLength = sqrt((x2 - x1).pow(2) + (y2 - y1).pow(2))
+            if (lineLength == 0f) return false
+
+            val distance = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) / lineLength
+            val minX = minOf(x1, x2) - stroke.strokeWidth
+            val maxX = maxOf(x1, x2) + stroke.strokeWidth
+            val minY = minOf(y1, y2) - stroke.strokeWidth
+            val maxY = maxOf(y1, y2) + stroke.strokeWidth
+
+            distance < stroke.strokeWidth * 1.5f && x in minX..maxX && y in minY..maxY
+        }
+
+        else -> {
+            stroke.points.any {
+                val dx = it.x - x
+                val dy = it.y - y
+                sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+            }
+        }
+    }
+}
+
+
 
 
