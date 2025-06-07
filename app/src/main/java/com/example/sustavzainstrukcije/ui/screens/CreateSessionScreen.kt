@@ -47,23 +47,24 @@ fun CreateSessionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Kreiraj novi session",
+            modifier = Modifier.padding(top = 10.dp),
+            text = "Create New Session",
             style = MaterialTheme.typography.headlineMedium
         )
 
         OutlinedTextField(
             value = subject,
             onValueChange = { subject = it },
-            label = { Text("Predmet") },
+            label = { Text("Subject") },
             modifier = Modifier.fillMaxWidth()
         )
 
         Text(
-            text = "Izaberi studenta:",
+            text = "Choose students:",
             style = MaterialTheme.typography.titleMedium
         )
 
@@ -80,7 +81,8 @@ fun CreateSessionScreen(
         }
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 28.dp)
         ) {
             Button(
                 onClick = { navController.popBackStack() },
@@ -89,7 +91,7 @@ fun CreateSessionScreen(
                     containerColor = MaterialTheme.colorScheme.secondary
                 )
             ) {
-                Text("Odustani")
+                Text("Cancel")
             }
 
             Button(
@@ -104,7 +106,7 @@ fun CreateSessionScreen(
                 modifier = Modifier.weight(1f),
                 enabled = selectedStudent != null && subject.isNotBlank()
             ) {
-                Text("Kreiraj")
+                Text("Create")
             }
         }
     }
