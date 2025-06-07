@@ -40,9 +40,9 @@ fun CreateSessionScreen(
     sessionViewModel: SessionViewModel = viewModel(),
     userViewModel: UserViewModel = viewModel()
 ) {
-    var selectedStudent by remember { mutableStateOf<User?>(null) }
+    var selectedStudents by remember { mutableStateOf(setOf<User>()) }
     var subject by remember { mutableStateOf("") }
-    val students by userViewModel.getStudentsForInstructor().collectAsState(initial = emptyList())
+    val students by userViewModel.getMessagedStudents().collectAsState(initial = emptyList())
 
     Column(
         modifier = Modifier
@@ -74,8 +74,14 @@ fun CreateSessionScreen(
             items(students) { student ->
                 StudentSelectionCard(
                     student = student,
-                    isSelected = selectedStudent?.id == student.id,
-                    onSelect = { selectedStudent = student }
+                    isSelected = selectedStudents.contains(student),
+                    onSelect = {
+                        selectedStudents = if (selectedStudents.contains(student)) {
+                            selectedStudents - student
+                        } else {
+                            selectedStudents + student
+                        }
+                    }
                 )
             }
         }
@@ -96,15 +102,16 @@ fun CreateSessionScreen(
 
             Button(
                 onClick = {
-                    selectedStudent?.let { student ->
-                        if (subject.isNotBlank()) {
-                            sessionViewModel.createSession(student.id, subject)
-                            navController.popBackStack()
-                        }
+                    if (selectedStudents.isNotEmpty() && subject.isNotBlank()) {
+                        sessionViewModel.createSession(
+                            studentIds = selectedStudents.map { it.id },
+                            subject = subject
+                        )
+                        navController.popBackStack()
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedStudent != null && subject.isNotBlank()
+                enabled = selectedStudents.isNotEmpty() && subject.isNotBlank()
             ) {
                 Text("Create")
             }

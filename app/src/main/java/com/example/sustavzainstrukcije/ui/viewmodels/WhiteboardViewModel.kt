@@ -254,15 +254,13 @@ class WhiteboardViewModel : ViewModel() {
     }
 
 
-    fun createNewPage() {
-        val sessionId = _currentPage.value?.sessionId ?: return
+    fun createNewPage(sessionId: String) {
         val currentUserId = auth.currentUser?.uid ?: return
-        val pages = _allPages.value
-        val nextPageNumber = (pages.maxOfOrNull { it.pageNumber } ?: 0) + 1
+        val nextPageNumber = (_allPages.value.maxOfOrNull { it.pageNumber } ?: 0) + 1
         val pageName = "Page $nextPageNumber"
 
         val pageId = UUID.randomUUID().toString()
-        val newPage = WhiteboardPage(
+        val page = WhiteboardPage(
             id = pageId,
             sessionId = sessionId,
             pageNumber = nextPageNumber,
@@ -271,32 +269,12 @@ class WhiteboardViewModel : ViewModel() {
         )
 
         firestore.collection("whiteboard_pages").document(pageId)
-            .set(newPage)
-            .addOnSuccessListener {
-                Log.d("WhiteboardViewModel", "New page created: $pageId")
-                // Ne postavlja se trenutna stranicu ovdje - to će se dogoditi automatski kroz listener
-            }
-            .addOnFailureListener { e ->
-                Log.e("WhiteboardViewModel", "Error creating new page", e)
-            }
-    }
-
-    private fun createNewPage(sessionId: String) {
-        val currentUserId = auth.currentUser?.uid ?: return
-        val pageId = UUID.randomUUID().toString()
-        val page = WhiteboardPage(
-            id = pageId,
-            sessionId = sessionId,
-            pageNumber = 1,
-            createdBy = currentUserId
-        )
-
-        firestore.collection("whiteboard_pages").document(pageId)
             .set(page)
             .addOnSuccessListener {
-                Log.d("WhiteboardViewModel", "First page created: $pageId")
+                Log.d("WhiteboardViewModel", "Page $nextPageNumber created with title: $pageName")
             }
     }
+
 
     fun toggleEraser() {
         _isEraserActive.value = !_isEraserActive.value
@@ -485,7 +463,7 @@ class WhiteboardViewModel : ViewModel() {
         pointerRef.child(sessionId).child(userId).removeValue()
     }
 
-    fun loadUserNames() {
+    private fun loadUserNames() {
         firestore.collection("users")
             .get()
             .addOnSuccessListener { snapshot ->

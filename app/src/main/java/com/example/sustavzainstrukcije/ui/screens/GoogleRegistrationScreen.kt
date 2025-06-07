@@ -84,18 +84,28 @@ fun GoogleRegistrationScreen(
                         role = role,
                         subjects = subjects,
                         availableHours = availableTime,
+                        onSuccess = onRegistrationComplete,
+                        onFailure = { errorMessage = it }
                     )
+                } else {
+                    errorMessage = "Please complete all required fields."
                 }
-                onRegistrationComplete()
             },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Register")
         }
+
     }
 }
 
-private fun saveUserData(role: String?, subjects: List<String>, availableHours: Map<String, List<String>>) {
+private fun saveUserData(
+    role: String?,
+    subjects: List<String>,
+    availableHours: Map<String, List<String>>,
+    onSuccess: () -> Unit,
+    onFailure: (String) -> Unit
+) {
     val user = FirebaseAuth.getInstance().currentUser
     if (user != null) {
 
@@ -105,12 +115,9 @@ private fun saveUserData(role: String?, subjects: List<String>, availableHours: 
             put("role", role ?: "student")
         }
 
-
         if (role == "instructor") {
-            // Convert List to Firestore-safe format
             userData["subjects"] = ArrayList(subjects)
 
-            // Convert Map<String, List> to Firestore-safe format
             val hoursMap = HashMap<String, ArrayList<String>>()
             availableHours.forEach { (key, value) ->
                 hoursMap[key] = ArrayList(value)
@@ -123,12 +130,17 @@ private fun saveUserData(role: String?, subjects: List<String>, availableHours: 
             .set(userData)
             .addOnSuccessListener {
                 Log.d(TAG, "User data saved successfully")
+                onSuccess()
             }
             .addOnFailureListener { e ->
                 Log.w(TAG, "Error saving user data", e)
+                onFailure("Error saving user data: ${e.localizedMessage}")
             }
+    } else {
+        onFailure("No signed-in user.")
     }
 }
+
 
 private fun validateForm(
     role: String,

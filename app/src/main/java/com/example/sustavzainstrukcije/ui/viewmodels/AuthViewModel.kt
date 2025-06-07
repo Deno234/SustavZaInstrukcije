@@ -9,8 +9,8 @@ import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
 import com.example.sustavzainstrukcije.BuildConfig
+import com.example.sustavzainstrukcije.ui.data.AuthState
 import com.example.sustavzainstrukcije.ui.data.User
 import com.google.android.gms.common.api.ApiException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -31,8 +31,8 @@ import kotlinx.coroutines.launch
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
 
-    private val _isAuthenticated = MutableStateFlow<Boolean?>(null) // null = checking, true = authenticated, false = not authenticated
-    val isAuthenticated: StateFlow<Boolean?> = _isAuthenticated.asStateFlow()
+    private val _authState = MutableStateFlow(AuthState.Checking)
+    val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
@@ -127,10 +127,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         _userData.value = document.toObject(User::class.java)?.copy(id = userId)
                         Log.d(TAG, "User $userId exists in Firestore. UserData: ${_userData.value}")
                         updateFcmToken()
-                        _isAuthenticated.value = true // Promijeni stanje umjesto navigacije
+                        _authState.value = AuthState.Authenticated
                     } else {
                         Log.d(TAG, "User $userId does not exist in Firestore.")
-                        _isAuthenticated.value = false // Korisnik treba dovršiti registraciju
+                        _authState.value = AuthState.NeedsRegistration // Korisnik treba dovršiti registraciju
                     }
                 }
             }
@@ -248,10 +248,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             this.currentUserId = currentFirebaseUser.uid
             Log.d(TAG, "User already authenticated: ${this.currentUserId}")
             fetchCurrentUserData()
-            _isAuthenticated.value = true
+            _authState.value = AuthState.Authenticated
         } else {
             Log.d(TAG, "No authenticated user found")
-            _isAuthenticated.value = false
+            _authState.value = AuthState.Unauthenticated
         }
     }
 
@@ -271,7 +271,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         auth.signOut()
         this.currentUserId = null
         _userData.value = null
-        _isAuthenticated.value = false
+        _authState.value = AuthState.Unauthenticated
         Log.d(TAG, "User signed out successfully")
     }
 

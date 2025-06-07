@@ -14,6 +14,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.sustavzainstrukcije.ui.data.AuthState
 import com.example.sustavzainstrukcije.ui.screens.ChatScreen
 import com.example.sustavzainstrukcije.ui.screens.CheckProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.CreateSessionScreen
@@ -37,12 +38,13 @@ fun NavGraph(
     onGoogleRegistrationComplete: () -> Unit
 ) {
 
-    val isAuthenticated by authViewModel.isAuthenticated.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
 
-    val startDestination = when (isAuthenticated) {
-        true -> "home"
-        false -> "main"
-        null -> "loading"
+    val startDestination = when (authState) {
+        AuthState.Authenticated -> "home"
+        AuthState.NeedsRegistration -> "googleRegistration"
+        AuthState.Unauthenticated -> "main"
+        AuthState.Checking -> "loading"
     }
 
     NavHost(navController = navController, startDestination = startDestination) {

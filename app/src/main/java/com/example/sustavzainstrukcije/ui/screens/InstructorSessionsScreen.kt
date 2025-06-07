@@ -141,9 +141,10 @@ fun SessionCard(
 ) {
 
     val invitedNames = listOfNotNull(
-        userNames[session.instructorId],
-        userNames[session.studentId]
-    ).joinToString(", ")
+        userNames[session.instructorId]
+    ) + session.studentIds.mapNotNull { userNames[it] }
+
+    val invitedNamesText = invitedNames.joinToString(", ")
 
 
     Card(
@@ -163,16 +164,10 @@ fun SessionCard(
             Text(
                 text = "Users in session: $onlineCount",
                 style = MaterialTheme.typography.bodyMedium,
-                color = when (session.status) {
-                    "active" -> MaterialTheme.colorScheme.primary
-                    "pending" -> MaterialTheme.colorScheme.secondary
-                    "completed" -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
             )
 
             Text(
-                text = "Invited: $invitedNames",
+                text = "Invited: $invitedNamesText",
                 style = MaterialTheme.typography.bodySmall
             )
 
@@ -190,33 +185,23 @@ fun SessionCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                when (session.status) {
-                    "active" -> {
-                        Button(
-                            onClick = onContinueClick,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Enter Session")
-                        }
+                if (session.startedAt != null) {
+                    Button(
+                        onClick = onContinueClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Enter Session")
                     }
-                    "pending" -> {
-                        Button(
-                            onClick = onJoinClick,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Start Session")
-                        }
-                    }
-                    "completed" -> {
-                        OutlinedButton(
-                            onClick = onContinueClick,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Review Session")
-                        }
+                } else {
+                    Button(
+                        onClick = onJoinClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Start Session")
                     }
                 }
             }
+
         }
     }
 }

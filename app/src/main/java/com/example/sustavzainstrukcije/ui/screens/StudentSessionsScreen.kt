@@ -19,7 +19,9 @@ import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.ui.data.InstructionSession
 import com.example.sustavzainstrukcije.ui.data.SessionInvitation
 import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,9 +32,13 @@ fun StudentSessionsScreen(
     val sessions by sessionViewModel.sessions.collectAsState()
     val invitations by sessionViewModel.invitations.collectAsState()
 
+    val lastVisited by sessionViewModel.lastVisitedMap.collectAsState()
+    val onlineUsers by sessionViewModel.onlineUsersMap.collectAsState()
+
     LaunchedEffect(Unit) {
         sessionViewModel.getAllStudentSessions() // Koristi novu funkciju
         sessionViewModel.getStudentInvitations()
+        sessionViewModel.loadLastVisitedSessions()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -73,7 +79,6 @@ fun StudentSessionsScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // POZIVNICE NA VRHU
                 if (invitations.isNotEmpty()) {
                     item {
                         Text(
@@ -105,7 +110,6 @@ fun StudentSessionsScreen(
                     }
                 }
 
-                // SVI SESSIONI (prihvaćeni i aktivni)
                 item {
                     Text(
                         text = "Svi sessioni (${sessions.size})",
@@ -117,6 +121,8 @@ fun StudentSessionsScreen(
                 items(sessions) { session ->
                     StudentSessionCard(
                         session = session,
+                        lastVisited = lastVisited[session.id],
+                        isInstructorOnline = onlineUsers[session.id]?.contains(session.instructorId) == true,
                         onJoinClick = {
                             navController.navigate("whiteboard/${session.id}")
                         }
@@ -205,20 +211,18 @@ fun InvitationCard(
 @Composable
 fun StudentSessionCard(
     session: InstructionSession,
+    lastVisited: Long?,
+    isInstructorOnline: Boolean,
     onJoinClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = when (session.status) {
-                "active" -> MaterialTheme.colorScheme.surfaceVariant
-                "pending" -> MaterialTheme.colorScheme.surface
-                "completed" -> MaterialTheme.colorScheme.surfaceVariant
-                else -> MaterialTheme.colorScheme.surface
-            }
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
+        val formatter = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
@@ -228,26 +232,22 @@ fun StudentSessionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Predmet: ${session.subject}",
+                    text = "Subject: ${session.subject}",
                     style = MaterialTheme.typography.titleMedium
                 )
 
                 Badge(
-                    containerColor = when (session.status) {
-                        "active" -> MaterialTheme.colorScheme.primary
-                        "pending" -> MaterialTheme.colorScheme.secondary
-                        "completed" -> MaterialTheme.colorScheme.tertiary
-                        else -> MaterialTheme.colorScheme.outline
-                    }
+                    containerColor = MaterialTheme.colorScheme.primary
                 ) {
+                    val badgeText = when {
+                        lastVisited == null -> "New"
+                        isInstructorOnline -> "Active"
+                        else -> "Idle"
+                    }
+
                     Text(
-                        text = session.status.uppercase(),
-                        color = when (session.status) {
-                            "active" -> MaterialTheme.colorScheme.onPrimary
-                            "pending" -> MaterialTheme.colorScheme.onSecondary
-                            "completed" -> MaterialTheme.colorScheme.onTertiary
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
+                        text = badgeText,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
             }
@@ -255,31 +255,27 @@ fun StudentSessionCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Kreiran: ${Date(session.createdAt)}",
+                text = "Created: ${formatter.format(Date(session.createdAt))}",
                 style = MaterialTheme.typography.bodySmall
             )
 
-            if (session.startedAt != null) {
+            lastVisited?.let {
                 Text(
-                    text = "Počeo: ${Date(session.startedAt)}",
+                    text = "Last visited: ${formatter.format(Date(it))}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+
 
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = onJoinClick,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = session.status == "active" || session.status == "completed"
+                enabled = true
             ) {
                 Text(
-                    when (session.status) {
-                        "active" -> "Pridruži se sessionu"
-                        "pending" -> "Čeka prihvaćanje"
-                        "completed" -> "Pregledaj session"
-                        else -> "Otvori session"
-                    }
+                    "Enter Session"
                 )
             }
         }

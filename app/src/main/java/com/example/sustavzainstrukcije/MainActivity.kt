@@ -24,6 +24,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.example.sustavzainstrukcije.ui.data.AuthState
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
@@ -60,12 +61,13 @@ class MainActivity : ComponentActivity() {
                     viewModel.checkAuthState()
                 }
 
-                LaunchedEffect(viewModel.isAuthenticated.collectAsState().value, appNavController) {
-                    val isAuth = viewModel.isAuthenticated.value
-                    if (isAuth == true) {
+                LaunchedEffect(viewModel.authState.collectAsState().value, appNavController) {
+                    val authState = viewModel.authState.value
+                    if (authState == AuthState.Authenticated) {
                         handleIntentExtras(intent)
                     }
                 }
+
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -130,10 +132,18 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
 
         // Provjeri je li korisnik autentificiran prije navigacije
-        if (viewModel.isAuthenticated.value == true) {
+        if (viewModel.authState.value == AuthState.Authenticated) {
             handleIntentExtras(intent)
         } else {
-            Log.d("MainActivity", "User not authenticated in onNewIntent, will handle after auth")
+            // Wait for authentication before handling the intent
+            lifecycleScope.launch {
+                viewModel.authState.collect { state ->
+                    if (state == AuthState.Authenticated) {
+                        handleIntentExtras(intent)
+                        return@collect
+                    }
+                }
+            }
         }
     }
 

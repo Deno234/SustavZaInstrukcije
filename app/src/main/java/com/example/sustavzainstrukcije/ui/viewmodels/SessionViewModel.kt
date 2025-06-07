@@ -10,7 +10,7 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.database
-import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,16 +47,15 @@ class SessionViewModel : ViewModel() {
 
 
     // Kreiranje novog sessiona
-    fun createSession(studentId: String, subject: String) {
+    fun createSession(studentIds: List<String>, subject: String) {
         val currentUserId = auth.currentUser?.uid ?: return
         val sessionId = UUID.randomUUID().toString()
 
         val session = InstructionSession(
             id = sessionId,
             instructorId = currentUserId,
-            studentId = studentId,
+            studentIds = studentIds,
             subject = subject,
-            status = "pending"
         )
 
         // Spremi session u Firestore
@@ -64,35 +63,31 @@ class SessionViewModel : ViewModel() {
             .set(session)
             .addOnSuccessListener {
                 Log.d("SessionViewModel", "Session created: $sessionId")
-                createSessionInvitation(session)
+
+                studentIds.forEach { studentId ->
+                    createSessionInvitation(sessionId, currentUserId, studentId, subject)
+                }
             }
             .addOnFailureListener { e ->
                 Log.e("SessionViewModel", "Error creating session", e)
             }
     }
 
-    private fun createSessionInvitation(session: InstructionSession) {
+    private fun createSessionInvitation(sessionId: String, instructorId: String, studentId: String, subject: String) {
         val invitationId = UUID.randomUUID().toString()
         val invitation = SessionInvitation(
             id = invitationId,
-            sessionId = session.id,
-            instructorId = session.instructorId,
-            studentId = session.studentId,
-            subject = session.subject
+            sessionId = sessionId,
+            instructorId = instructorId,
+            studentId = studentId,
+            subject = subject
         )
 
         firestore.collection("invitations").document(invitationId)
             .set(invitation)
             .addOnSuccessListener {
-                Log.d("SessionViewModel", "Invitation sent to student: ${session.studentId}")
-                // Pošalji notifikaciju studentu
-                sendSessionInvitationNotification(session)
+                Log.d("SessionViewModel", "Invitation sent to student: ${studentId}")
             }
-    }
-
-    private fun sendSessionInvitationNotification(session: InstructionSession) {
-        // Implementiranje slanje notifikacije preko FCM-a
-        // Slično kao što se šaljeu poruke, ali s tipom "session_invitation"
     }
 
     // Dohvaćanje sessiona za instruktora
@@ -143,17 +138,7 @@ class SessionViewModel : ViewModel() {
             .update("status", "accepted")
             .addOnSuccessListener {
                 Log.d("SessionViewModel", "Invitation accepted")
-
-                // Dohvati sessionId iz pozivnice i ažuriraj status
-                firestore.collection("invitations").document(invitationId)
-                    .get()
-                    .addOnSuccessListener { doc ->
-                        val invitation = doc.toObject(SessionInvitation::class.java)
-                        invitation?.let {
-                            updateSessionStatus(it.sessionId, "active")
-                            onInvitationAccepted() // Samo zvanje callback, ne navigiraj
-                        }
-                    }
+                onInvitationAccepted()
             }
     }
 
@@ -161,33 +146,43 @@ class SessionViewModel : ViewModel() {
     fun getAllStudentSessions() {
         val currentUserId = auth.currentUser?.uid ?: return
 
-        // Dohvati sve sessione gdje je student pozvan
-        firestore.collection("sessions")
+        // Step 1: Fetch accepted invitations
+        firestore.collection("invitations")
             .whereEqualTo("studentId", currentUserId)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("SessionViewModel", "Error fetching all student sessions", e)
-                    return@addSnapshotListener
+            .whereEqualTo("status", "accepted")
+            .get()
+            .addOnSuccessListener { invitationSnapshot ->
+                val acceptedSessionIds = invitationSnapshot.documents.mapNotNull {
+                    it.getString("sessionId")
                 }
 
-                val sessionsList = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
+                if (acceptedSessionIds.isEmpty()) {
+                    _sessions.value = emptyList()
+                    return@addOnSuccessListener
+                }
 
-                _sessions.value = sessionsList
+                // Step 2: Fetch sessions matching those IDs
+                firestore.collection("sessions")
+                    .whereIn(FieldPath.documentId(), acceptedSessionIds.take(10)) // limit to 10 per Firestore restriction
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .addSnapshotListener { snapshot, e ->
+                        if (e != null) {
+                            Log.e("SessionViewModel", "Error fetching student sessions", e)
+                            return@addSnapshotListener
+                        }
+
+                        val sessionsList = snapshot?.documents?.mapNotNull { doc ->
+                            doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
+                        } ?: emptyList()
+
+                        _sessions.value = sessionsList
+
+                        listenToOnlineUsersForSessions(sessionsList.map { it.id })
+                    }
             }
     }
 
-    private fun updateSessionStatus(sessionId: String, status: String) {
-        firestore.collection("sessions").document(sessionId)
-            .update(
-                mapOf(
-                    "status" to status,
-                    "startedAt" to System.currentTimeMillis()
-                )
-            )
-    }
+
 
     fun listenToOnlineUsers(sessionId: String) {
         val ref = db.getReference("online_users/$sessionId")
@@ -285,5 +280,26 @@ class SessionViewModel : ViewModel() {
             _lastVisitedMap.value = map
         }
     }
+
+    fun loadLastVisitedSessions() {
+        val userId = auth.currentUser?.uid ?: return
+
+        firestore.collection("users")
+            .document(userId)
+            .collection("lastVisited")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("SessionViewModel", "Failed to load lastVisited", error)
+                    return@addSnapshotListener
+                }
+
+                val visitedMap = snapshot?.documents?.associate {
+                    it.id to (it.getLong("timestamp") ?: 0L)
+                } ?: emptyMap()
+
+                _lastVisitedMap.value = visitedMap
+            }
+    }
+
 
 }

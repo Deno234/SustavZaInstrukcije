@@ -82,6 +82,8 @@ import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import kotlin.math.abs
 import kotlin.math.pow
@@ -151,6 +153,26 @@ fun WhiteboardScreen(
 
     val canUndo by whiteboardViewModel.canUndo.collectAsState()
     val canRedo by whiteboardViewModel.canRedo.collectAsState()
+
+    DisposableEffect(sessionId, currentUserId) {
+        if (currentUserIsInstructor) {
+            val presenceRef = Firebase.firestore
+                .collection("onlineUsers")
+                .document(sessionId)
+
+            presenceRef.set(
+                mapOf("userIds" to FieldValue.arrayUnion(currentUserId)),
+                SetOptions.merge()
+            )
+
+            onDispose {
+                presenceRef.update("userIds", FieldValue.arrayRemove(currentUserId))
+            }
+        } else {
+            onDispose { }
+        }
+    }
+
 
 
 
@@ -252,7 +274,7 @@ fun WhiteboardScreen(
                 if (allPages.isNotEmpty() && currentPageIndex == allPages.size - 1) {
                     item {
                         IconButton(
-                            onClick = { whiteboardViewModel.createNewPage() },
+                            onClick = { whiteboardViewModel.createNewPage(sessionId) },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
@@ -965,7 +987,8 @@ fun WhiteboardScreen(
                 title = { Text("Users") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val allUserIds = listOfNotNull(currentSession?.instructorId, currentSession?.studentId)
+                        val allUserIds = listOfNotNull(currentSession?.instructorId) +
+                                (currentSession?.studentIds ?: emptyList())
                         allUserIds.forEach { userId ->
                             val name = userNames[userId] ?: userId.take(6)
                             val isOnline = onlineUserIds.contains(userId)
