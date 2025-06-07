@@ -10,5 +10,6 @@ data class InstructionSession(
     val startedAt: Long? = null,
     val endedAt: Long? = null,
     val pages: List<String> = emptyList(), // Lista ID-jeva stranica
-    val currentPageId: String = ""
+    val currentPageId: String = "",
+    val isEditable: Boolean = false
 )

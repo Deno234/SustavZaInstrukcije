@@ -1,5 +1,6 @@
 package com.example.sustavzainstrukcije.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.LineWeight
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -75,7 +78,10 @@ import com.example.sustavzainstrukcije.ui.data.DrawingStroke
 import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.ToolMode
+import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -85,7 +91,8 @@ import kotlin.math.sqrt
 fun WhiteboardScreen(
     sessionId: String,
     navController: NavHostController,
-    whiteboardViewModel: WhiteboardViewModel = viewModel()
+    whiteboardViewModel: WhiteboardViewModel = viewModel(),
+    sessionViewModel: SessionViewModel = viewModel()
 ) {
     val strokes by whiteboardViewModel.strokes.collectAsState()
     val currentPage by whiteboardViewModel.currentPage.collectAsState()
@@ -131,16 +138,40 @@ fun WhiteboardScreen(
     val pointers by whiteboardViewModel.pointers.collectAsState()
     val userNames by whiteboardViewModel.userNames.collectAsState()
 
+    var showUserPopup by remember { mutableStateOf(false) }
+
+    val currentSession by sessionViewModel.currentSession.collectAsState()
+    val onlineUserIds by sessionViewModel.onlineUsers.collectAsState()
+    val currentUserId = Firebase.auth.currentUser?.uid
+
+    val currentUserIsInstructor = currentSession?.instructorId == currentUserId
+    val instructorOnline = currentSession?.instructorId?.let { onlineUserIds.contains(it) } == true
+    val isEditable = currentUserIsInstructor || instructorOnline
+
+    val canUndo by whiteboardViewModel.canUndo.collectAsState()
+    val canRedo by whiteboardViewModel.canRedo.collectAsState()
+
 
 
     LaunchedEffect(sessionId) {
+        sessionViewModel.loadSession(sessionId)
         whiteboardViewModel.initializeWhiteboard(sessionId)
+        sessionViewModel.setUserOnline(sessionId)
+        sessionViewModel.listenToOnlineUsers(sessionId)
     }
 
     LaunchedEffect(allPages) {
         if (allPages.isNotEmpty()) {
             isLoading = false
         }
+    }
+
+    LaunchedEffect(instructorOnline) {
+        Log.d("WB", "Instructor online = $instructorOnline")
+    }
+
+    LaunchedEffect(isEditable) {
+        Log.d("WB", "isEditable = $isEditable")
     }
 
     if (isLoading) {
@@ -172,6 +203,9 @@ fun WhiteboardScreen(
                 }
             },
             actions = {
+                IconButton(onClick = { showUserPopup = true }) {
+                    Icon(Icons.Default.People, contentDescription = "Online users")
+                }
                 IconButton(onClick = { showDeleteDialog = true }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete page")
                 }
@@ -289,14 +323,14 @@ fun WhiteboardScreen(
                 }
             }
 
-            IconButton(onClick = { whiteboardViewModel.undo() }) {
+            IconButton(onClick = { whiteboardViewModel.undo() }, enabled = isEditable && canUndo) {
                 Icon(
                     Icons.AutoMirrored.Filled.Undo,
                     contentDescription = "Undo"
                 )
             }
 
-            IconButton(onClick = { whiteboardViewModel.redo() }) {
+            IconButton(onClick = { whiteboardViewModel.redo() }, enabled = isEditable && canRedo) {
                 Icon(
                     Icons.AutoMirrored.Filled.Redo,
                     contentDescription = "Redo"
@@ -326,9 +360,9 @@ fun WhiteboardScreen(
                     .fillMaxSize()
                     .clipToBounds()
                     .background(Color.White)
-                    .pointerInput(isEraser, eraserMode, strokes) {
+                    .pointerInput(isEditable, isEraser, eraserMode, strokes) {
                         detectTapGestures { offset ->
-                            if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height) {
+                            if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height || !isEditable) {
                                 return@detectTapGestures
                             }
                             if (isEraser && eraserMode == EraseMode.STROKE) {
@@ -355,10 +389,10 @@ fun WhiteboardScreen(
                             }
                         }
                     }
-                    .pointerInput(isEraser, eraserMode) {
+                    .pointerInput(isEditable, isEraser, eraserMode) {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height) return@detectDragGestures
+                                if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height || !isEditable) return@detectDragGestures
 
                                 currentPoints = listOf(Point(offset.x, offset.y))
 
@@ -384,6 +418,7 @@ fun WhiteboardScreen(
                                 }
                             },
                             onDrag = { change, _ ->
+                                if (!isEditable) return@detectDragGestures
                                 val newPoint = Point(change.position.x, change.position.y)
 
                                 // Za oblike: uvijek se čuva početna i krajnja točka
@@ -406,6 +441,7 @@ fun WhiteboardScreen(
                             },
 
                             onDragEnd = {
+                                if (!isEditable) return@detectDragGestures
                                 val shouldAdd = when {
                                     toolMode == ToolMode.DRAW && currentPoints.size > 1 -> true
                                     toolMode in listOf(ToolMode.SHAPE_LINE, ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE) && currentPoints.size == 2 -> true
@@ -641,6 +677,20 @@ fun WhiteboardScreen(
             )
         }
 
+        DisposableEffect(sessionId) {
+            onDispose {
+                sessionViewModel.setUserOffline(sessionId)
+            }
+        }
+
+        DisposableEffect(Unit) {
+            sessionViewModel.setUserOnline(sessionId)
+            onDispose {
+                sessionViewModel.setUserOffline(sessionId)
+            }
+        }
+
+
         if (showEraserSizePopup) {
             AlertDialog(
                 onDismissRequest = { showEraserSizePopup = false },
@@ -835,7 +885,7 @@ fun WhiteboardScreen(
             )
         }
 
-        if (showRenameDialog) {
+        if (showRenameDialog && isEditable) {
             var newTitle by remember { mutableStateOf(currentPage?.title ?: "") }
 
             AlertDialog(
@@ -860,7 +910,7 @@ fun WhiteboardScreen(
             )
         }
 
-        if (showDeleteDialog) {
+        if (showDeleteDialog && isEditable) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
                 title = { Text("Delete Page") },
@@ -881,7 +931,7 @@ fun WhiteboardScreen(
             )
         }
 
-        if (showClearDialog) {
+        if (showClearDialog && isEditable) {
             AlertDialog(
                 onDismissRequest = { showClearDialog = false },
                 title = { Text("Clear Page") },
@@ -897,6 +947,27 @@ fun WhiteboardScreen(
                 }
             )
         }
+
+        if (showUserPopup) {
+            AlertDialog(
+                onDismissRequest = { showUserPopup = false },
+                title = { Text("Online Users") },
+                text = {
+                    Column {
+                        onlineUserIds.forEach { userId ->
+                            val name = userNames[userId] ?: userId.take(6)
+                            Text("• $name")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showUserPopup = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
 
 
     }

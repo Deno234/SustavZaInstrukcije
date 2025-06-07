@@ -6,7 +6,11 @@ import com.example.sustavzainstrukcije.ui.data.InstructionSession
 import com.example.sustavzainstrukcije.ui.data.SessionInvitation
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.database
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +31,14 @@ class SessionViewModel : ViewModel() {
 
     private val _invitations = MutableStateFlow<List<SessionInvitation>>(emptyList())
     val invitations: StateFlow<List<SessionInvitation>> = _invitations.asStateFlow()
+
+    private val _onlineUsers = MutableStateFlow<List<String>>(emptyList())
+    val onlineUsers: StateFlow<List<String>> = _onlineUsers
+
+    private var sessionListener: ListenerRegistration? = null
+
+
+
 
     // Kreiranje novog sessiona
     fun createSession(studentId: String, subject: String) {
@@ -119,27 +131,6 @@ class SessionViewModel : ViewModel() {
             }
     }
 
-    // Dohvaćanje sessiona za studenta
-    fun getStudentSessions() {
-        val currentUserId = auth.currentUser?.uid ?: return
-
-        firestore.collection("sessions")
-            .whereEqualTo("studentId", currentUserId)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("SessionViewModel", "Error fetching student sessions", e)
-                    return@addSnapshotListener
-                }
-
-                val sessionsList = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
-
-                _sessions.value = sessionsList
-            }
-    }
-
     // Modificiraj acceptInvitation da automatski navigira na session
     fun acceptInvitation(invitationId: String, onInvitationAccepted: () -> Unit) {
         firestore.collection("invitations").document(invitationId)
@@ -191,4 +182,58 @@ class SessionViewModel : ViewModel() {
                 )
             )
     }
+
+    fun listenToOnlineUsers(sessionId: String) {
+        val ref = db.getReference("online_users/$sessionId")
+        ref.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val instructorId = _currentSession.value?.instructorId ?: return
+                val ids = snapshot.children.mapNotNull { it.key }
+                Log.d("WB", "Firebase ONLINE IDS update: $ids")
+                _onlineUsers.value = ids
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    fun setUserOnline(sessionId: String) {
+        val userId = auth.currentUser?.uid ?: return
+        val ref = db.getReference("online_users/$sessionId/$userId")
+        ref.setValue(true)
+        ref.onDisconnect().removeValue()
+
+        firestore.collection("sessions").document(sessionId)
+            .get().addOnSuccessListener { snapshot ->
+                val instructorId = snapshot.getString("instructorId")
+                if (instructorId == userId) {
+                    updateSessionEditable(sessionId, true)
+                }
+            }
+    }
+
+    fun updateSessionEditable(sessionId: String, editable: Boolean) {
+        firestore.collection("sessions").document(sessionId)
+            .update("isEditable", editable)
+    }
+
+    fun loadSession(sessionId: String) {
+        firestore.collection("sessions").document(sessionId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("SessionViewModel", "Error loading session", e)
+                    return@addSnapshotListener
+                }
+
+                val session = snapshot?.toObject(InstructionSession::class.java)?.copy(id = snapshot.id)
+                _currentSession.value = session
+            }
+    }
+
+    fun setUserOffline(sessionId: String) {
+        val userId = auth.currentUser?.uid ?: return
+        db.getReference("online_users/$sessionId/$userId").removeValue()
+    }
+
+
 }

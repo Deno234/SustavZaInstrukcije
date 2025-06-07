@@ -19,8 +19,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
-import kotlin.math.hypot
-import kotlin.math.max
 
 class WhiteboardViewModel : ViewModel() {
     private val db = Firebase.database
@@ -69,6 +67,12 @@ class WhiteboardViewModel : ViewModel() {
 
     private val _userNames = MutableStateFlow<Map<String, String>>(emptyMap())
     val userNames: StateFlow<Map<String, String>> = _userNames
+
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo
+
+    private val _canRedo = MutableStateFlow(false)
+    val canRedo: StateFlow<Boolean> = _canRedo
 
 
     fun setToolMode(tool: ToolMode, sessionId: String) {
@@ -237,6 +241,7 @@ class WhiteboardViewModel : ViewModel() {
         undoStacks.getOrPut(key) { ArrayDeque() }.addLast(StrokeAction.Add(stroke))
         redoStacks.getOrPut(key) { ArrayDeque() }.clear()
 
+        updateUndoRedoState(userId = currentUserId, pageId = pageId)
 
         firestore.collection("drawing_strokes").document(strokeId)
             .set(strokeData)
@@ -315,6 +320,9 @@ class WhiteboardViewModel : ViewModel() {
 
         _strokes.value = _strokes.value.filter { it.id != strokeId }
         firestore.collection("drawing_strokes").document(strokeId).delete()
+
+        updateUndoRedoState(userId = currentUserId, pageId = pageId)
+
     }
 
 
@@ -341,6 +349,8 @@ class WhiteboardViewModel : ViewModel() {
                 firestore.collection("drawing_strokes").document(stroke.id).set(strokeData)
             }
         }
+
+        updateUndoRedoState(userId = currentUserId, pageId = pageId)
     }
 
 
@@ -365,20 +375,18 @@ class WhiteboardViewModel : ViewModel() {
                 firestore.collection("drawing_strokes").document(action.stroke.id).delete()
             }
         }
+
+        updateUndoRedoState(userId = currentUserId, pageId = pageId)
+
     }
 
 
-
-    fun findStrokeAtPosition(x: Float, y: Float): DrawingStroke? {
-        return _strokes.value.firstOrNull { stroke ->
-            if (stroke.color == "#FFFFFF") return@firstOrNull false
-            stroke.points.any { point ->
-                val distanceX = x - point.x
-                val distanceY = y - point.y
-                hypot(distanceX, distanceY) < stroke.strokeWidth * 2
-            }
-        }
+    private fun updateUndoRedoState(userId: String, pageId: String) {
+        val key = stackKey(userId, pageId)
+        _canUndo.value = undoStacks[key]?.isNotEmpty() == true
+        _canRedo.value = redoStacks[key]?.isNotEmpty() == true
     }
+
 
     fun renamePage(pageId: String, newTitle: String) {
         firestore.collection("whiteboard_pages").document(pageId)
