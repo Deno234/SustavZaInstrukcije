@@ -35,8 +35,14 @@ class SessionViewModel : ViewModel() {
     private val _onlineUsers = MutableStateFlow<List<String>>(emptyList())
     val onlineUsers: StateFlow<List<String>> = _onlineUsers
 
-    private var sessionListener: ListenerRegistration? = null
+    private val _onlineUsersMap = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val onlineUsersMap: StateFlow<Map<String, List<String>>> = _onlineUsersMap
 
+    private val _userNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val userNames: StateFlow<Map<String, String>> = _userNames
+
+    private val _lastVisitedMap = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val lastVisitedMap: StateFlow<Map<String, Long>> = _lastVisitedMap
 
 
 
@@ -235,5 +241,49 @@ class SessionViewModel : ViewModel() {
         db.getReference("online_users/$sessionId/$userId").removeValue()
     }
 
+    fun listenToOnlineUsersForSessions(sessionIds: List<String>) {
+        sessionIds.forEach { sessionId ->
+            db.getReference("online_users/$sessionId")
+                .addValueEventListener(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val userIds = snapshot.children.mapNotNull { it.key }
+                        _onlineUsersMap.value = _onlineUsersMap.value.toMutableMap().apply {
+                            this[sessionId] = userIds
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        }
+    }
+
+    fun loadUserNames() {
+        Firebase.firestore.collection("users")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val map = snapshot.documents.associate {
+                    val uid = it.id
+                    val name = it.getString("name") ?: "User"
+                    uid to name
+                }
+                _userNames.value = map
+            }
+    }
+
+    fun fetchLastVisitedTimestamps(sessionIds: List<String>) {
+        val currentUserId = auth.currentUser?.uid ?: return
+        val collection = firestore.collection("users")
+            .document(currentUserId)
+            .collection("lastVisited")
+
+        collection.get().addOnSuccessListener { snapshot ->
+            val map = snapshot.documents.mapNotNull { doc ->
+                val sessionId = doc.id
+                val timestamp = doc.getLong("timestamp")
+                if (timestamp != null && sessionId in sessionIds) sessionId to timestamp else null
+            }.toMap()
+            _lastVisitedMap.value = map
+        }
+    }
 
 }

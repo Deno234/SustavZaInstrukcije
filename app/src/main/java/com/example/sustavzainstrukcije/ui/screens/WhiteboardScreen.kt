@@ -82,6 +82,7 @@ import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -172,6 +173,16 @@ fun WhiteboardScreen(
 
     LaunchedEffect(isEditable) {
         Log.d("WB", "isEditable = $isEditable")
+    }
+
+    LaunchedEffect(Unit) {
+        if (currentUserId != null) {
+            Firebase.firestore.collection("users")
+                .document(currentUserId)
+                .collection("lastVisited")
+                .document(sessionId)
+                .set(mapOf("timestamp" to System.currentTimeMillis()))
+        }
     }
 
     if (isLoading) {
