@@ -951,12 +951,22 @@ fun WhiteboardScreen(
         if (showUserPopup) {
             AlertDialog(
                 onDismissRequest = { showUserPopup = false },
-                title = { Text("Online Users") },
+                title = { Text("Users") },
                 text = {
-                    Column {
-                        onlineUserIds.forEach { userId ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val allUserIds = listOfNotNull(currentSession?.instructorId, currentSession?.studentId)
+                        allUserIds.forEach { userId ->
                             val name = userNames[userId] ?: userId.take(6)
-                            Text("• $name")
+                            val isOnline = onlineUserIds.contains(userId)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isOnline) Color(0xFF4CAF50) else Color.Gray)
+                                )
+                                Text(text = "  $name", modifier = Modifier.padding(start = 4.dp))
+                            }
                         }
                     }
                 },
