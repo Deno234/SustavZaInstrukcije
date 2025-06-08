@@ -57,10 +57,13 @@ fun StudentSessionsScreen(
     val lastVisited by sessionViewModel.lastVisitedMap.collectAsState()
     val onlineUsers by sessionViewModel.onlineUsersMap.collectAsState()
 
+    val userNames by sessionViewModel.userNames.collectAsState()
+
     LaunchedEffect(Unit) {
         sessionViewModel.getAllStudentSessions()
         sessionViewModel.getStudentInvitations()
         sessionViewModel.loadLastVisitedSessions()
+        sessionViewModel.loadUserNames()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -144,6 +147,7 @@ fun StudentSessionsScreen(
                         session = session,
                         lastVisited = lastVisited[session.id],
                         isInstructorOnline = onlineUsers[session.id]?.contains(session.instructorId) == true,
+                        instructorName = userNames[session.instructorId] ?: "Unknown Instructor",
                         onJoinClick = {
                             navController.navigate("whiteboard/${session.id}")
                         }
@@ -234,6 +238,7 @@ fun StudentSessionCard(
     session: InstructionSession,
     lastVisited: Long?,
     isInstructorOnline: Boolean,
+    instructorName: String,
     onJoinClick: () -> Unit
 ) {
     Card(
@@ -274,6 +279,11 @@ fun StudentSessionCard(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Instructor: $instructorName",
+                style = MaterialTheme.typography.bodyMedium
+            )
 
             Text(
                 text = "Created: ${formatter.format(Date(session.createdAt))}",
