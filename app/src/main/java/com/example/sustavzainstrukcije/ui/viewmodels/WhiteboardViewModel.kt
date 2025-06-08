@@ -427,8 +427,21 @@ class WhiteboardViewModel : ViewModel() {
             .get()
             .addOnSuccessListener { snapshot ->
                 snapshot.documents.forEach { it.reference.delete() }
+
+                clearUndoRedoForPage(pageId)
             }
     }
+
+    private fun clearUndoRedoForPage(pageId: String) {
+        undoStacks.keys.filter { it.endsWith(":$pageId") }.forEach { undoStacks.remove(it) }
+        redoStacks.keys.filter { it.endsWith(":$pageId") }.forEach { redoStacks.remove(it) }
+
+        val currentUserId = auth.currentUser?.uid ?: return
+        val key = stackKey(currentUserId, pageId)
+        _canUndo.value = undoStacks[key]?.isNotEmpty() == true
+        _canRedo.value = redoStacks[key]?.isNotEmpty() == true
+    }
+
 
     private fun listenToPointers(sessionId: String) {
         pointerRef.child(sessionId).addValueEventListener(object : ValueEventListener {

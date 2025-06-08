@@ -128,15 +128,5 @@ fun ProfileScreen(
         ) {
             Text("Save Changes")
         }
-
-        Button(
-            onClick = { authViewModel.signOut() },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error
-            )
-        ) {
-            Text("Sign Out", color = MaterialTheme.colorScheme.onError)
-        }
     }
 }
