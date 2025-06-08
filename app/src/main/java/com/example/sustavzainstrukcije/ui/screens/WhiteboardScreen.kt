@@ -245,7 +245,7 @@ fun WhiteboardScreen(
             }
         )
 
-        // 2. Navigacija kroz stranice
+        // Navigacija kroz stranice
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -295,7 +295,7 @@ fun WhiteboardScreen(
             }
         }
 
-        // 3. Alati za crtanje
+        // Alati za crtanje
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -303,7 +303,6 @@ fun WhiteboardScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Pisanje
             if (!isEraser) {
                 Box(
                     modifier = Modifier
@@ -381,7 +380,7 @@ fun WhiteboardScreen(
 
         }
 
-        // 4. Canvas
+        // Canvas
         Box(
             modifier = Modifier
                 .weight(1f)

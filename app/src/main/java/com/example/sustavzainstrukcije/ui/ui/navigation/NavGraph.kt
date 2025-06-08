@@ -6,6 +6,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import com.example.sustavzainstrukcije.ui.screens.MessagesScreen
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -40,6 +41,34 @@ fun NavGraph(
 
     val authState by authViewModel.authState.collectAsState()
 
+    LaunchedEffect(authState) {
+        when (authState) {
+            AuthState.Authenticated -> {
+                navController.navigate("home") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            AuthState.NeedsRegistration -> {
+                navController.navigate("googleRegistration") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            AuthState.Unauthenticated -> {
+                navController.navigate("main") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            else -> {}
+        }
+    }
+
+
     val startDestination = when (authState) {
         AuthState.Authenticated -> "home"
         AuthState.NeedsRegistration -> "googleRegistration"
@@ -72,9 +101,11 @@ fun NavGraph(
         }
         composable("login") {
             LoginScreen(
+                authViewModel = authViewModel,
                 onLoginComplete = { navController.navigate("home") }
             )
         }
+
         composable("googleRegistration") {
             GoogleRegistrationScreen(
                 onRegistrationComplete = onGoogleRegistrationComplete
@@ -85,7 +116,7 @@ fun NavGraph(
         }
 
         composable("profile") {
-            ProfileScreen()
+            ProfileScreen(navController)
         }
 
         composable("checkProfile/{instructorId}") { backStackEntry ->
@@ -104,7 +135,7 @@ fun NavGraph(
                     navController = navController
                 )
             } else {
-                Text("Greška: ID chata ili ID drugog korisnika nedostaje.")
+                Text("Error: Chat ID or ID of the other user is missing.")
             }
         }
 
@@ -137,7 +168,7 @@ fun NavGraph(
                     navController = navController
                 )
             } else {
-                Text("Greška: Session ID nedostaje.")
+                Text("Error: Missing session ID.")
             }
         }
     }

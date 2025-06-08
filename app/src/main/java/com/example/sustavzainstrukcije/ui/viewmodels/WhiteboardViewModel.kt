@@ -118,11 +118,9 @@ class WhiteboardViewModel : ViewModel() {
                 Log.d("WhiteboardViewModel", "Loaded ${pagesList.size} pages")
                 _allPages.value = pagesList
 
-                // Ako nema stranica, kreiraj prvu
                 if (pagesList.isEmpty()) {
                     createNewPage(sessionId)
                 } else {
-                    // Postavi trenutnu stranicu na prvu ako nije postavljena
                     if (_currentPage.value == null) {
                         setCurrentPage(0)
                     }
@@ -137,7 +135,7 @@ class WhiteboardViewModel : ViewModel() {
             val page = pages[pageIndex]
             _currentPage.value = page
 
-            // Prestani slušati prethodne stroke-ove
+            // Prestanak slušanja prethodnih stroke-ova
             strokesListener?.remove()
             listenToStrokes(page.id)
 
@@ -317,11 +315,9 @@ class WhiteboardViewModel : ViewModel() {
 
         when (action) {
             is StrokeAction.Add -> {
-                // Undo ADD => REMOVE stroke
                 firestore.collection("drawing_strokes").document(action.stroke.id).delete()
             }
             is StrokeAction.Remove -> {
-                // Undo REMOVE => RE-ADD stroke
                 val stroke = action.stroke
                 val strokeData = stroke.toMap() + mapOf("id" to stroke.id, "pageId" to pageId)
                 firestore.collection("drawing_strokes").document(stroke.id).set(strokeData)
@@ -370,13 +366,11 @@ class WhiteboardViewModel : ViewModel() {
         firestore.collection("whiteboard_pages").document(pageId)
             .update("title", newTitle)
             .addOnSuccessListener {
-                // Ažuriranje lokalno
                 val updatedPages = _allPages.value.map {
                     if (it.id == pageId) it.copy(title = newTitle) else it
                 }
                 _allPages.value = updatedPages
 
-                // Ako je promijenjena aktivna stranica
                 if (_currentPage.value?.id == pageId) {
                     _currentPage.value = updatedPages.find { it.id == pageId }
                 }
@@ -390,7 +384,7 @@ class WhiteboardViewModel : ViewModel() {
         val userId = Firebase.auth.currentUser?.uid ?: return
         val pageNumberToRemove = page.pageNumber
 
-        // Prvo se obrišu svi stroke-ovi na toj stranici
+        // Brisanje svih stroke-ova na toj stranici
         firestore.collection("drawing_strokes")
             .whereEqualTo("pageId", pageId)
             .get()
@@ -486,7 +480,7 @@ class WhiteboardViewModel : ViewModel() {
     }
 }
 
-// Extension funkcija za konverziju u Map
+// Extension funkcija za pretvorbu u Map
 fun DrawingStroke.toMap(): Map<String, Any> {
     val map = mutableMapOf(
         "userId" to userId,

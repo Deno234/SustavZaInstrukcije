@@ -1,6 +1,6 @@
 package com.example.sustavzainstrukcije.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,11 +11,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +42,7 @@ import com.example.sustavzainstrukcije.ui.utils.generateChatId
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.InstructorsViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckProfileScreen(
     instructorId: String,
@@ -50,58 +58,93 @@ fun CheckProfileScreen(
         authViewModel.fetchCurrentUserData()
     }
 
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally)
-    {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = "Instructor Details",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = instructor?.name ?: "Loading...",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = instructor?.email ?: "",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Subjects: ${instructor?.subjects?.joinToString(", ") ?: ""}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = instructor?.name ?: "Loading...",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = instructor?.email ?: "",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Subjects: ${instructor?.subjects?.joinToString(", ") ?: ""}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        navController.navigate("chat/${authViewModel.currentUserId?.let {
+                            generateChatId(it, instructorId)
+                        }}/$instructorId")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Chat with Instructor")
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = { showTimeSlots = !showTimeSlots },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showTimeSlots) "Hide Time Slots" else "Show Time Slots")
+                }
+
+                if (showTimeSlots) {
+                    instructor?.let {
+                        TimeSlotsSection(
+                            onDismissRequest = { showTimeSlots = false },
+                            availableHours = it.availableHours
+                        )
+                    }
+                }
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(
-            onClick = { navController.navigate("chat/${authViewModel.currentUserId?.let {
-                generateChatId(
-                    it, instructorId)
-            }}/$instructorId")},
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Chat with Instructor")
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(
-            onClick = { showTimeSlots = !showTimeSlots },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (showTimeSlots) "Hide Time Slots" else "Show Time Slots")
-        }
-
-        if (showTimeSlots) {
-            instructor?.let { TimeSlotsSection(onDismissRequest = { showTimeSlots = false }, it.availableHours) }
-        }
     }
+
+
 }
 
 @Composable

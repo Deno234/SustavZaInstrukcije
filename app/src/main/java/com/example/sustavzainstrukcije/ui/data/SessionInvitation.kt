@@ -6,6 +6,6 @@ data class SessionInvitation(
     val instructorId: String = "",
     val studentId: String = "",
     val subject: String = "",
-    val status: String = "pending", // pending, accepted, declined
+    val status: String = "pending",
     val createdAt: Long = System.currentTimeMillis()
 )

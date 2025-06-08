@@ -1,15 +1,37 @@
 package com.example.sustavzainstrukcije.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -36,23 +58,21 @@ fun StudentSessionsScreen(
     val onlineUsers by sessionViewModel.onlineUsersMap.collectAsState()
 
     LaunchedEffect(Unit) {
-        sessionViewModel.getAllStudentSessions() // Koristi novu funkciju
+        sessionViewModel.getAllStudentSessions()
         sessionViewModel.getStudentInvitations()
         sessionViewModel.loadLastVisitedSessions()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar
         TopAppBar(
-            title = { Text("Moji Sessioni") },
+            title = { Text("My Sessions") },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Natrag")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             }
         )
 
-        // Content
         if (sessions.isEmpty() && invitations.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -63,12 +83,12 @@ fun StudentSessionsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "Nema sessiona",
+                        text = "No sessions",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Čekaj pozivnice od instruktora",
+                        text = "Wait for invitations from instructors",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -82,7 +102,7 @@ fun StudentSessionsScreen(
                 if (invitations.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Nove pozivnice (${invitations.size})",
+                            text = "New invitations (${invitations.size})",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(bottom = 8.dp)
@@ -94,25 +114,26 @@ fun StudentSessionsScreen(
                             invitation = invitation,
                             onAccept = {
                                 sessionViewModel.acceptInvitation(invitation.id) {
-                                    // Samo refresh podatke, ne navigiraj
                                     sessionViewModel.getAllStudentSessions()
                                     sessionViewModel.getStudentInvitations()
                                 }
                             },
                             onDecline = {
-                                // TODO: Implement decline functionality
+                                sessionViewModel.declineInvitation(invitation.id) {
+                                    sessionViewModel.getStudentInvitations()
+                                }
                             }
                         )
                     }
 
                     item {
-                        Divider(modifier = Modifier.padding(vertical = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
                 }
 
                 item {
                     Text(
-                        text = "Svi sessioni (${sessions.size})",
+                        text = "All sessions (${sessions.size})",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -155,7 +176,7 @@ fun InvitationCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Nova pozivnica",
+                    text = "New invitation",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -170,13 +191,13 @@ fun InvitationCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Predmet: ${invitation.subject}",
+                text = "Subject: ${invitation.subject}",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
 
             Text(
-                text = "Kreiran: ${Date(invitation.createdAt)}",
+                text = "Created at: ${Date(invitation.createdAt)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -192,7 +213,7 @@ fun InvitationCard(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Prihvati")
+                    Text("Accept")
                 }
 
                 OutlinedButton(
@@ -201,7 +222,7 @@ fun InvitationCard(
                 ) {
                     Icon(Icons.Default.Close, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Odbij")
+                    Text("Decline")
                 }
             }
         }

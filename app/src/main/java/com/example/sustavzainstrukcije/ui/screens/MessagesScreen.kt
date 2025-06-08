@@ -7,15 +7,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +42,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessagesScreen(userId: String, navController: NavHostController) {
     val chatInfos = remember { mutableStateListOf<ChatInfo>() }
@@ -61,7 +69,6 @@ fun MessagesScreen(userId: String, navController: NavHostController) {
                             if (lastMessage == null || message.timestamp > lastMessage!!.timestamp) {
                                 lastMessage = message
                             }
-                            // Provjeri je li poruka nepročitana za trenutnog korisnika
                             if (message.receiverId == userId && message.readBy[userId] != true) {
                                 unreadMessagesCount++
                             }
@@ -103,13 +110,25 @@ fun MessagesScreen(userId: String, navController: NavHostController) {
         }
     }
 
-    LazyColumn {
-        items(chatInfos) { chatInfo ->
-            ChatListItem(
-                chatInfo = chatInfo,
-                currentUserId = userId,
-                navController = navController
-            )
+    Column(modifier = Modifier.fillMaxSize()) {
+
+        TopAppBar(
+            title = { Text("My Messages") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+
+        LazyColumn {
+            items(chatInfos) { chatInfo ->
+                ChatListItem(
+                    chatInfo = chatInfo,
+                    currentUserId = userId,
+                    navController = navController
+                )
+            }
         }
     }
 }
@@ -142,7 +161,7 @@ fun ChatListItem(
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
             Text(
-                text = otherUserDetails?.name ?: "Korisnik ${chatInfo.otherUserId.take(6)}...",
+                text = otherUserDetails?.name ?: "User ${chatInfo.otherUserId.take(6)}...",
                 fontWeight = titleFontWeight,
                 style = MaterialTheme.typography.titleMedium
             )

@@ -2,7 +2,6 @@ package com.example.sustavzainstrukcije.ui.viewmodels
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.example.sustavzainstrukcije.ui.data.User
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
@@ -16,11 +15,7 @@ import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.ktx.toObject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 class UserViewModel : ViewModel() {
 
@@ -108,29 +103,4 @@ class UserViewModel : ViewModel() {
         awaitClose { chatRef.removeEventListener(listener) }
     }
 
-
-
-
-
-
-
-
-    private val _specificUser = MutableStateFlow<User?>(null)
-    val specificUser: StateFlow<User?> = _specificUser
-
-    fun fetchUserByIdOnce(userId: String) {
-        viewModelScope.launch {
-            try {
-                val doc = db.collection("users").document(userId).get().await()
-                if (doc.exists()) {
-                    _specificUser.value = doc.toObject(User::class.java)?.copy(id = doc.id)
-                } else {
-                    _specificUser.value = null
-                }
-            } catch (e: Exception) {
-                Log.e("UserViewModel", "Error fetching user", e)
-                _specificUser.value = null
-            }
-        }
-    }
 }

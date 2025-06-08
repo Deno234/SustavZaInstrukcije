@@ -110,7 +110,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun checkUserInFirestore(userId: String?) {
-        if (userId == null || userId.isEmpty()) {
+        if (userId.isNullOrEmpty()) {
             Log.e(TAG, "checkUserInFirestore called with null or empty userId.")
             viewModelScope.launch {
                 _errorMessage.emit("Autentifikacija korisnika nije uspjela.")
@@ -130,7 +130,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         _authState.value = AuthState.Authenticated
                     } else {
                         Log.d(TAG, "User $userId does not exist in Firestore.")
-                        _authState.value = AuthState.NeedsRegistration // Korisnik treba dovršiti registraciju
+                        _authState.value = AuthState.NeedsRegistration
                     }
                 }
             }
@@ -205,14 +205,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             }
     }
 
-    /**
-     * Dohvaća trenutni FCM token i sprema/ažurira ga u Firestore-u za prijavljenog korisnika.
-     * Ovu funkciju treba pozvati MainActivity nakon što je dobivena dozvola za notifikacije,
-     * ili AuthViewModel nakon uspješne prijave/registracije.
-     */
     fun updateFcmToken() {
         val userId = this.currentUserId
-        if (userId == null || userId.isEmpty()) {
+        if (userId.isNullOrEmpty()) {
             Log.w(TAG, "Cannot update FCM token: currentUserId is not available.")
             return
         }

@@ -58,7 +58,7 @@ class SessionViewModel : ViewModel() {
             subject = subject,
         )
 
-        // Spremi session u Firestore
+        // Spremanje sjednice u Firestore
         firestore.collection("sessions").document(sessionId)
             .set(session)
             .addOnSuccessListener {
@@ -86,11 +86,11 @@ class SessionViewModel : ViewModel() {
         firestore.collection("invitations").document(invitationId)
             .set(invitation)
             .addOnSuccessListener {
-                Log.d("SessionViewModel", "Invitation sent to student: ${studentId}")
+                Log.d("SessionViewModel", "Invitation sent to student: $studentId")
             }
     }
 
-    // Dohvaćanje sessiona za instruktora
+    // Dohvaćanje sjednice za instruktora
     fun getInstructorSessions() {
         val currentUserId = auth.currentUser?.uid ?: return
 
@@ -132,7 +132,6 @@ class SessionViewModel : ViewModel() {
             }
     }
 
-    // Modificiraj acceptInvitation da automatski navigira na session
     fun acceptInvitation(invitationId: String, onInvitationAccepted: () -> Unit) {
         firestore.collection("invitations").document(invitationId)
             .update("status", "accepted")
@@ -146,7 +145,6 @@ class SessionViewModel : ViewModel() {
     fun getAllStudentSessions() {
         val currentUserId = auth.currentUser?.uid ?: return
 
-        // Step 1: Fetch accepted invitations
         firestore.collection("invitations")
             .whereEqualTo("studentId", currentUserId)
             .whereEqualTo("status", "accepted")
@@ -161,9 +159,8 @@ class SessionViewModel : ViewModel() {
                     return@addOnSuccessListener
                 }
 
-                // Step 2: Fetch sessions matching those IDs
                 firestore.collection("sessions")
-                    .whereIn(FieldPath.documentId(), acceptedSessionIds.take(10)) // limit to 10 per Firestore restriction
+                    .whereIn(FieldPath.documentId(), acceptedSessionIds.take(10))
                     .orderBy("createdAt", Query.Direction.DESCENDING)
                     .addSnapshotListener { snapshot, e ->
                         if (e != null) {
@@ -213,7 +210,7 @@ class SessionViewModel : ViewModel() {
             }
     }
 
-    fun updateSessionEditable(sessionId: String, editable: Boolean) {
+    private fun updateSessionEditable(sessionId: String, editable: Boolean) {
         firestore.collection("sessions").document(sessionId)
             .update("isEditable", editable)
     }
@@ -300,6 +297,16 @@ class SessionViewModel : ViewModel() {
                 _lastVisitedMap.value = visitedMap
             }
     }
+
+    fun declineInvitation(invitationId: String, onComplete: () -> Unit = {}) {
+        Firebase.firestore.collection("invitations")
+            .document(invitationId)
+            .delete()
+            .addOnSuccessListener {
+                onComplete()
+            }
+    }
+
 
 
 }

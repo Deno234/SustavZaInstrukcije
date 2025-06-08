@@ -8,7 +8,7 @@ data class InstructionSession(
     val createdAt: Long = System.currentTimeMillis(),
     val startedAt: Long? = null,
     val endedAt: Long? = null,
-    val pages: List<String> = emptyList(), // Lista ID-jeva stranica
+    val pages: List<String> = emptyList(),
     val currentPageId: String = "",
     val isEditable: Boolean = false
 )

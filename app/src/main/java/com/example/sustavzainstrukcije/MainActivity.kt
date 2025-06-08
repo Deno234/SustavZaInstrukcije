@@ -28,7 +28,6 @@ import com.example.sustavzainstrukcije.ui.data.AuthState
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.ui.navigation.NavGraph
-import com.example.sustavzainstrukcije.ui.utils.generateChatId
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.launch
 
@@ -36,8 +35,6 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: AuthViewModel by viewModels()
     private lateinit var appNavController: NavHostController
-
-    private var pendingChatNavigation: Pair<String, String>? = null
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -131,11 +128,9 @@ class MainActivity : ComponentActivity() {
         Log.d("MainActivity", "onNewIntent called - app was already running")
         setIntent(intent)
 
-        // Provjeri je li korisnik autentificiran prije navigacije
         if (viewModel.authState.value == AuthState.Authenticated) {
             handleIntentExtras(intent)
         } else {
-            // Wait for authentication before handling the intent
             lifecycleScope.launch {
                 viewModel.authState.collect { state ->
                     if (state == AuthState.Authenticated) {
@@ -159,7 +154,7 @@ class MainActivity : ComponentActivity() {
             }
         } ?: Log.d("MainActivity", "No extras found in intent")
 
-        // Provjeri i FCM podatke i MyFirebaseMessagingService podatke
+        // Provjeravanje i FCM podataka i MyFirebaseMessagingService podataka
         val navigateTo = intent.getStringExtra("navigateTo")
         val chatId = intent.getStringExtra("chatId")
         val otherUserId = intent.getStringExtra("otherUserId")
@@ -167,7 +162,7 @@ class MainActivity : ComponentActivity() {
         Log.d("MainActivity", "NavigateTo value: '$navigateTo'")
         Log.d("MainActivity", "ChatId: '$chatId', OtherUserId: '$otherUserId'")
 
-        // Provjeri ima li podataka za navigaciju (bilo iz MyFirebaseMessagingService ili direktno iz FCM)
+        // Provjeravanje ima li podataka za navigaciju (bilo iz MyFirebaseMessagingService ili direktno iz FCM)
         if ((navigateTo == "ChatScreen" || (chatId != null && otherUserId != null)) &&
             chatId != null && otherUserId != null) {
 
@@ -187,22 +182,21 @@ class MainActivity : ComponentActivity() {
                             appNavController.navigate("chat/$chatId/$otherUserId") {
                                 launchSingleTop = true
                             }
-                            Log.i("MainActivity", "✅ Successfully navigated to chat: $chatId with user: $otherUserId")
+                            Log.i("MainActivity", "Successfully navigated to chat: $chatId with user: $otherUserId")
 
-                            // Očisti intent
                             intent.removeExtra("navigateTo")
                             intent.removeExtra("chatId")
                             intent.removeExtra("otherUserId")
                             intent.action = null
                         } catch (e: Exception) {
-                            Log.e("MainActivity", "❌ Navigation failed: ${e.message}", e)
+                            Log.e("MainActivity", "Navigation failed: ${e.message}", e)
                         }
                     }
                 } else {
-                    Log.w("MainActivity", "❌ Current user ID is null, cannot navigate to chat")
+                    Log.w("MainActivity", "Current user ID is null, cannot navigate to chat")
                 }
             } else {
-                Log.w("MainActivity", "❌ NavController not initialized")
+                Log.w("MainActivity", "NavController not initialized")
             }
         } else {
             Log.d("MainActivity", "No ChatScreen navigation requested. NavigateTo: '$navigateTo', ChatId: '$chatId', OtherUserId: '$otherUserId'")

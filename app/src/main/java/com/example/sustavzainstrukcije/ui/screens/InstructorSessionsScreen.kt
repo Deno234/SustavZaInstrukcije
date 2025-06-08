@@ -21,7 +21,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -61,7 +60,6 @@ fun InstructorSessionsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar
         TopAppBar(
             title = { Text("My Sessions") },
             navigationIcon = {
@@ -76,7 +74,6 @@ fun InstructorSessionsScreen(
             }
         )
 
-        // Content
         if (sessions.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
