@@ -271,7 +271,7 @@ fun WhiteboardScreen(
                         onClick = { whiteboardViewModel.setCurrentPage(index) }
                     )
                 }
-                if (allPages.isNotEmpty() && currentPageIndex == allPages.size - 1) {
+                if (isEditable && allPages.isNotEmpty() && currentPageIndex == allPages.size - 1) {
                     item {
                         IconButton(
                             onClick = { whiteboardViewModel.createNewPage(sessionId) },

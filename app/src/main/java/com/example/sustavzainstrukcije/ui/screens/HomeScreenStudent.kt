@@ -33,10 +33,10 @@ fun HomeScreenStudent(navController: NavHostController, userId: String?, authVie
         }
 
         Button(
-            onClick = { navController.navigate("appointments") },
+            onClick = { navController.navigate("student_sessions") },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("My Appointments")
+            Text("My Sessions")
         }
 
         Button(
@@ -51,13 +51,6 @@ fun HomeScreenStudent(navController: NavHostController, userId: String?, authVie
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("View Instructors")
-        }
-
-        Button(
-            onClick = { navController.navigate("student_sessions") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("My Sessions")
         }
 
         Button(
