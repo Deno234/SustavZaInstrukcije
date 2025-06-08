@@ -45,7 +45,7 @@ class WhiteboardViewModel : ViewModel() {
     private val _isEraserActive = MutableStateFlow(false)
     val isEraserActive: StateFlow<Boolean> = _isEraserActive.asStateFlow()
 
-    private val _eraseMode = MutableStateFlow(EraseMode.COLOR) // "color" ili "stroke"
+    private val _eraseMode = MutableStateFlow(EraseMode.COLOR)
     val eraseMode: StateFlow<EraseMode> = _eraseMode.asStateFlow()
 
     private val _eraserSize = MutableStateFlow(32f)

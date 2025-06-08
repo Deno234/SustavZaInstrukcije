@@ -141,7 +141,7 @@ class SessionViewModel : ViewModel() {
             }
     }
 
-    // Dohvaćanje svih sessiona za studenta (prihvaćenih i pending)
+    // Dohvaćanje svih sjednica za studenta (prihvaćenih i pending)
     fun getAllStudentSessions() {
         val currentUserId = auth.currentUser?.uid ?: return
 

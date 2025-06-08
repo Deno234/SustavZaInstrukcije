@@ -188,7 +188,7 @@ fun InvitationCard(
                 Badge(
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
-                    Text("NOVO", color = MaterialTheme.colorScheme.onPrimary)
+                    Text("NEW", color = MaterialTheme.colorScheme.onPrimary)
                 }
             }
 

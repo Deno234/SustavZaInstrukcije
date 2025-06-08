@@ -93,7 +93,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _loadingState.value = false
                 Log.w(TAG, "Invalid credential type received from Google Sign-In.")
                 viewModelScope.launch {
-                    _errorMessage.emit("Neispravan tip vjerodajnice.")
+                    _errorMessage.emit("Invalid credential type.")
                 }
             }
         } catch (e: GoogleIdTokenParsingException) {
@@ -113,7 +113,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         if (userId.isNullOrEmpty()) {
             Log.e(TAG, "checkUserInFirestore called with null or empty userId.")
             viewModelScope.launch {
-                _errorMessage.emit("Autentifikacija korisnika nije uspjela.")
+                _errorMessage.emit("Authentication for user unsuccessful.")
             }
             _loadingState.value = false
             return
@@ -138,15 +138,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _loadingState.value = false
                 Log.e(TAG, "Error fetching user from Firestore for $userId.", exception)
                 viewModelScope.launch {
-                    _errorMessage.emit("Greška u bazi: ${exception.localizedMessage}")
+                    _errorMessage.emit("Error in database: ${exception.localizedMessage}")
                 }
             }
     }
 
     private fun handleAuthError(exception: Exception?) {
         val errorMessage = when (exception) {
-            is ApiException -> "Google prijava nije uspjela: ${exception.statusCode}"
-            else -> "Autentifikacija nije uspjela: ${exception?.localizedMessage}"
+            is ApiException -> "Google Sign-in unsuccessful: ${exception.statusCode}"
+            else -> "Authentication unsuccessful: ${exception?.localizedMessage}"
         }
         Log.e(TAG, errorMessage, exception)
         viewModelScope.launch {
@@ -186,7 +186,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInstructorProfile(name: String, subjects: List<String>, availableHours: Map<String, List<String>>) {
         val userId = this.currentUserId ?: run {
             Log.w(TAG, "Cannot update profile: currentUserId is null.")
-            viewModelScope.launch { _errorMessage.emit("Niste prijavljeni.") }
+            viewModelScope.launch { _errorMessage.emit("Not logged in.") }
             return
         }
         val updates = mapOf(
@@ -201,7 +201,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error updating instructor profile for $userId.", e)
-                viewModelScope.launch { _errorMessage.emit("Greška pri ažuriranju profila.") }
+                viewModelScope.launch { _errorMessage.emit("Error in updating profile.") }
             }
     }
 
