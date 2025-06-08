@@ -11,22 +11,30 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
+import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 
 @Composable
-fun HomeScreenInstructor(navController: NavHostController, instructorId: String?, authViewModel: AuthViewModel = viewModel()) {
+fun HomeScreenInstructor(navController: NavHostController, instructorId: String?, authViewModel: AuthViewModel = viewModel(), sessionViewModel: SessionViewModel = viewModel()) {
     Log.d("HomeScreenInstructor", "Instructor id: $instructorId")
+
+    LaunchedEffect(Unit) {
+        sessionViewModel.getInstructorSessions()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
     ) {
+
         Button(
             onClick = { navController.navigate("profile") },
             modifier = Modifier.fillMaxWidth()
@@ -35,10 +43,10 @@ fun HomeScreenInstructor(navController: NavHostController, instructorId: String?
         }
 
         Button(
-            onClick = { navController.navigate("appointments") },
+            onClick = { navController.navigate("instructor_sessions") },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("My Appointments")
+            Text("My Sessions")
         }
 
         Button(
@@ -46,13 +54,6 @@ fun HomeScreenInstructor(navController: NavHostController, instructorId: String?
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("My Messages")
-        }
-
-        Button(
-            onClick = { navController.navigate("otherInstructors") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Other Instructors")
         }
 
         Button(

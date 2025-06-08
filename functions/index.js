@@ -2,6 +2,7 @@ const {onValueCreated} = require("firebase-functions/v2/database");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 
 initializeApp();
 
@@ -142,3 +143,65 @@ exports.sendNewMessageNotification = onValueCreated(
       return null;
     },
 );
+
+// Dodaj ovu funkciju za slanje pozivnica
+exports.sendSessionInvitation = onDocumentCreated(
+    {
+      document: "invitations/{invitationId}",
+      region: "europe-west1",
+    },
+    async (event) => {
+      const invitation = event.data.data();
+      const invitationId = event.params.invitationId;
+
+      console.log("New session invitation created:", invitationId);
+
+      try {
+        // Dohvati FCM token studenta
+        const studentDoc = await firestore.collection("users")
+            .doc(invitation.studentId).get();
+        if (!studentDoc.exists) {
+          console.log("Student not found:", invitation.studentId);
+          return null;
+        }
+
+        const studentData = studentDoc.data();
+        const fcmToken = studentData.fcmToken;
+
+        if (!fcmToken) {
+          console.log("No FCM token for student:", invitation.studentId);
+          return null;
+        }
+
+        // Dohvati ime instruktora
+        const instructorDoc = await firestore.collection("users")
+            .doc(invitation.instructorId).get();
+        const instructorName = instructorDoc.exists ?
+        instructorDoc.data().name : "Instruktor";
+
+        // Pošalji notifikaciju
+        const message = {
+          data: {
+            type: "session_invitation",
+            sessionId: invitation.sessionId,
+            instructorId: invitation.instructorId,
+            subject: invitation.subject,
+            title: `Pozivnica za session`,
+            body: `${instructorName} vas poziva na 
+            session iz predmeta ${invitation.subject}`,
+            navigateTo: "StudentInvitations",
+          },
+          token: fcmToken,
+        };
+
+        const messaging = getMessaging();
+        const response = await messaging.send(message);
+        console.log("Session invitation notification sent:", response);
+      } catch (error) {
+        console.error("Error sending session invitation:", error);
+      }
+
+      return null;
+    },
+);
+

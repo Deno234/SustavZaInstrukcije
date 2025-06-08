@@ -469,6 +469,7 @@ fun InstructorsHorizontalRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             /**
+             * Zašto je dobro koristiti items:
              * items - works within LazyRow/LazyColumn
              * More efficient for large lists
              * Lazy - only renders visible items

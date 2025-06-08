@@ -8,9 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,22 +30,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.ui.utils.AvailableHoursInput
 import com.example.sustavzainstrukcije.ui.utils.Constants.INSTRUCTOR_SUBJECTS
 import com.example.sustavzainstrukcije.ui.utils.SubjectSelector
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    authViewModel: AuthViewModel = viewModel(),
+    navController: NavHostController, authViewModel: AuthViewModel = viewModel()
 ) {
     val currentUser by authViewModel.userData.collectAsState()
-    var name by remember { mutableStateOf(currentUser?.name ?: "") }
-    var subjects by remember { mutableStateOf(currentUser?.subjects ?: listOf()) }
-    var availableHours by remember { mutableStateOf(currentUser?.availableHours ?: emptyMap()) }
+    var name by remember { mutableStateOf("") }
+    var subjects by remember { mutableStateOf(listOf<String>()) }
+    var availableHours by remember { mutableStateOf(emptyMap<String, List<String>>()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUser) {
         authViewModel.fetchCurrentUserData()
+        currentUser?.let { user ->
+            name = user.name
+            subjects = user.subjects
+            availableHours = user.availableHours
+        }
     }
 
     if (currentUser == null) {
@@ -53,13 +65,21 @@ fun ProfileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Profile",
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
+        CenterAlignedTopAppBar(
+            title = {
+                Text(
+                    text = "Profile",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
         )
 
         Text(
@@ -106,16 +126,6 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Save Changes")
-        }
-
-        Button(
-            onClick = { authViewModel.signOut() },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error
-            )
-        ) {
-            Text("Sign Out", color = MaterialTheme.colorScheme.onError)
         }
     }
 }

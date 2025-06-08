@@ -26,12 +26,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun LoginScreen(
     onLoginComplete: () -> Unit,
+    authViewModel: AuthViewModel,
     modifier: Modifier = Modifier
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -90,12 +92,16 @@ fun LoginScreen(
                 loginUser(
                     email = email,
                     password = password,
-                    onSuccess = onLoginComplete,
+                    onSuccess = {
+                        authViewModel.checkAuthState()
+                        onLoginComplete()
+                    },
                     onError = { errorMessage = it }
                 )
             },
             modifier = Modifier.fillMaxWidth()
-        ) {
+        )
+        {
             Text("Login")
         }
     }

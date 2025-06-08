@@ -6,6 +6,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import com.example.sustavzainstrukcije.ui.screens.MessagesScreen
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -14,15 +15,20 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.sustavzainstrukcije.ui.data.AuthState
 import com.example.sustavzainstrukcije.ui.screens.ChatScreen
 import com.example.sustavzainstrukcije.ui.screens.CheckProfileScreen
+import com.example.sustavzainstrukcije.ui.screens.CreateSessionScreen
 import com.example.sustavzainstrukcije.ui.screens.FindInstructorsScreen
 import com.example.sustavzainstrukcije.ui.screens.GoogleRegistrationScreen
 import com.example.sustavzainstrukcije.ui.screens.HomeScreen
+import com.example.sustavzainstrukcije.ui.screens.InstructorSessionsScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
+import com.example.sustavzainstrukcije.ui.screens.StudentSessionsScreen
+import com.example.sustavzainstrukcije.ui.screens.WhiteboardScreen
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 
 @Composable
@@ -33,12 +39,41 @@ fun NavGraph(
     onGoogleRegistrationComplete: () -> Unit
 ) {
 
-    val isAuthenticated by authViewModel.isAuthenticated.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
 
-    val startDestination = when (isAuthenticated) {
-        true -> "home"
-        false -> "main"
-        null -> "loading"
+    LaunchedEffect(authState) {
+        when (authState) {
+            AuthState.Authenticated -> {
+                navController.navigate("home") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            AuthState.NeedsRegistration -> {
+                navController.navigate("googleRegistration") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            AuthState.Unauthenticated -> {
+                navController.navigate("main") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            else -> {}
+        }
+    }
+
+
+    val startDestination = when (authState) {
+        AuthState.Authenticated -> "home"
+        AuthState.NeedsRegistration -> "googleRegistration"
+        AuthState.Unauthenticated -> "main"
+        AuthState.Checking -> "loading"
     }
 
     NavHost(navController = navController, startDestination = startDestination) {
@@ -66,9 +101,11 @@ fun NavGraph(
         }
         composable("login") {
             LoginScreen(
+                authViewModel = authViewModel,
                 onLoginComplete = { navController.navigate("home") }
             )
         }
+
         composable("googleRegistration") {
             GoogleRegistrationScreen(
                 onRegistrationComplete = onGoogleRegistrationComplete
@@ -79,7 +116,7 @@ fun NavGraph(
         }
 
         composable("profile") {
-            ProfileScreen()
+            ProfileScreen(navController)
         }
 
         composable("checkProfile/{instructorId}") { backStackEntry ->
@@ -98,7 +135,7 @@ fun NavGraph(
                     navController = navController
                 )
             } else {
-                Text("Greška: ID chata ili ID drugog korisnika nedostaje.")
+                Text("Error: Chat ID or ID of the other user is missing.")
             }
         }
 
@@ -111,9 +148,28 @@ fun NavGraph(
             FindInstructorsScreen(navController)
         }
 
-        /*
-        composable("otherInstructors") {
-            OtherInstructorsScreen()
-        }*/
+        composable("create_session") {
+            CreateSessionScreen(navController)
+        }
+
+        composable("instructor_sessions") {
+            InstructorSessionsScreen(navController)
+        }
+
+        composable("student_sessions") {
+            StudentSessionsScreen(navController)
+        }
+
+        composable("whiteboard/{sessionId}") { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
+            if (sessionId.isNotEmpty()) {
+                WhiteboardScreen(
+                    sessionId = sessionId,
+                    navController = navController
+                )
+            } else {
+                Text("Error: Missing session ID.")
+            }
+        }
     }
 }

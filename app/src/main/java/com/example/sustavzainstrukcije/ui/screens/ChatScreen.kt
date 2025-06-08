@@ -121,7 +121,7 @@ fun ChatScreen(
                 value = newMessage,
                 onValueChange = { newMessage = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Napiši poruku...") },
+                placeholder = { Text("Write a message...") },
                 shape = RoundedCornerShape(24.dp),
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = MaterialTheme.colorScheme.primary,
@@ -147,7 +147,7 @@ fun ChatScreen(
                 },
                 enabled = newMessage.isNotBlank() && currentUser != null
             ) {
-                Text("Pošalji")
+                Text("Send")
             }
         }
     }

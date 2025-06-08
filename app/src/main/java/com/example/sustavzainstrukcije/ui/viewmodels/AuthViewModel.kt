@@ -9,8 +9,8 @@ import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
 import com.example.sustavzainstrukcije.BuildConfig
+import com.example.sustavzainstrukcije.ui.data.AuthState
 import com.example.sustavzainstrukcije.ui.data.User
 import com.google.android.gms.common.api.ApiException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -31,8 +31,8 @@ import kotlinx.coroutines.launch
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
 
-    private val _isAuthenticated = MutableStateFlow<Boolean?>(null) // null = checking, true = authenticated, false = not authenticated
-    val isAuthenticated: StateFlow<Boolean?> = _isAuthenticated.asStateFlow()
+    private val _authState = MutableStateFlow(AuthState.Checking)
+    val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
@@ -93,7 +93,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _loadingState.value = false
                 Log.w(TAG, "Invalid credential type received from Google Sign-In.")
                 viewModelScope.launch {
-                    _errorMessage.emit("Neispravan tip vjerodajnice.")
+                    _errorMessage.emit("Invalid credential type.")
                 }
             }
         } catch (e: GoogleIdTokenParsingException) {
@@ -110,10 +110,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun checkUserInFirestore(userId: String?) {
-        if (userId == null || userId.isEmpty()) {
+        if (userId.isNullOrEmpty()) {
             Log.e(TAG, "checkUserInFirestore called with null or empty userId.")
             viewModelScope.launch {
-                _errorMessage.emit("Autentifikacija korisnika nije uspjela.")
+                _errorMessage.emit("Authentication for user unsuccessful.")
             }
             _loadingState.value = false
             return
@@ -127,10 +127,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         _userData.value = document.toObject(User::class.java)?.copy(id = userId)
                         Log.d(TAG, "User $userId exists in Firestore. UserData: ${_userData.value}")
                         updateFcmToken()
-                        _isAuthenticated.value = true // Promijeni stanje umjesto navigacije
+                        _authState.value = AuthState.Authenticated
                     } else {
                         Log.d(TAG, "User $userId does not exist in Firestore.")
-                        _isAuthenticated.value = false // Korisnik treba dovršiti registraciju
+                        _authState.value = AuthState.NeedsRegistration
                     }
                 }
             }
@@ -138,15 +138,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _loadingState.value = false
                 Log.e(TAG, "Error fetching user from Firestore for $userId.", exception)
                 viewModelScope.launch {
-                    _errorMessage.emit("Greška u bazi: ${exception.localizedMessage}")
+                    _errorMessage.emit("Error in database: ${exception.localizedMessage}")
                 }
             }
     }
 
     private fun handleAuthError(exception: Exception?) {
         val errorMessage = when (exception) {
-            is ApiException -> "Google prijava nije uspjela: ${exception.statusCode}"
-            else -> "Autentifikacija nije uspjela: ${exception?.localizedMessage}"
+            is ApiException -> "Google Sign-in unsuccessful: ${exception.statusCode}"
+            else -> "Authentication unsuccessful: ${exception?.localizedMessage}"
         }
         Log.e(TAG, errorMessage, exception)
         viewModelScope.launch {
@@ -186,7 +186,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInstructorProfile(name: String, subjects: List<String>, availableHours: Map<String, List<String>>) {
         val userId = this.currentUserId ?: run {
             Log.w(TAG, "Cannot update profile: currentUserId is null.")
-            viewModelScope.launch { _errorMessage.emit("Niste prijavljeni.") }
+            viewModelScope.launch { _errorMessage.emit("Not logged in.") }
             return
         }
         val updates = mapOf(
@@ -201,18 +201,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error updating instructor profile for $userId.", e)
-                viewModelScope.launch { _errorMessage.emit("Greška pri ažuriranju profila.") }
+                viewModelScope.launch { _errorMessage.emit("Error in updating profile.") }
             }
     }
 
-    /**
-     * Dohvaća trenutni FCM token i sprema/ažurira ga u Firestore-u za prijavljenog korisnika.
-     * Ovu funkciju treba pozvati MainActivity nakon što je dobivena dozvola za notifikacije,
-     * ili AuthViewModel nakon uspješne prijave/registracije.
-     */
     fun updateFcmToken() {
         val userId = this.currentUserId
-        if (userId == null || userId.isEmpty()) {
+        if (userId.isNullOrEmpty()) {
             Log.w(TAG, "Cannot update FCM token: currentUserId is not available.")
             return
         }
@@ -248,10 +243,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             this.currentUserId = currentFirebaseUser.uid
             Log.d(TAG, "User already authenticated: ${this.currentUserId}")
             fetchCurrentUserData()
-            _isAuthenticated.value = true
+            _authState.value = AuthState.Authenticated
         } else {
             Log.d(TAG, "No authenticated user found")
-            _isAuthenticated.value = false
+            _authState.value = AuthState.Unauthenticated
         }
     }
 
@@ -271,7 +266,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         auth.signOut()
         this.currentUserId = null
         _userData.value = null
-        _isAuthenticated.value = false
+        _authState.value = AuthState.Unauthenticated
         Log.d(TAG, "User signed out successfully")
     }
 
