@@ -9,6 +9,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -161,6 +163,7 @@ fun WhiteboardScreen(
     val canUndo by whiteboardViewModel.canUndo.collectAsState()
     val canRedo by whiteboardViewModel.canRedo.collectAsState()
 
+
     var pan by remember { mutableStateOf(Offset.Zero) }      // world offset
     var scale by remember { mutableFloatStateOf(1f) }        // 1f = 100%
     val minScale = 0.25f
@@ -171,6 +174,21 @@ fun WhiteboardScreen(
 
     fun screenToWorld(o: Offset, pan: Offset, scale: Float) =
         Point(o.x / scale + pan.x, o.y / scale + pan.y)
+
+    var lastCentroid by remember { mutableStateOf(Offset.Zero) }
+
+    val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
+        val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
+        if (newScale != scale) {
+            val worldBefore = screenToWorld(lastCentroid, pan, scale)
+            scale = newScale
+            val worldAfter = screenToWorld(lastCentroid, pan, scale)
+            pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
+        }
+        pan += offsetChange / scale
+    }
+
+
 
 
     DisposableEffect(sessionId, currentUserId) {
@@ -411,126 +429,139 @@ fun WhiteboardScreen(
                     .fillMaxSize()
                     .clipToBounds()
                     .background(Color.White)
-                    .pointerInput(Unit) {
-                        detectTransformGestures(
-                            panZoomLock = false
-                        ) { centroid, panChange, zoomChange, _ ->
-                            // Pan: panChange je u screen space-u -> prevedi u world
-                            pan += panChange / scale
-
-                            // Zoom oko centroida
-                            val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
-                            if (newScale != scale) {
-                                val worldBefore = screenToWorld(centroid, pan, scale)
-                                scale = newScale
-                                val worldAfter = screenToWorld(centroid, pan, scale)
-                                // korigiraj pan tako da točka pod prstima ostane na mjestu
-                                pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
-                            }
-                        }
-                    }
-
-                    .pointerInput(isEditable, isEraser, eraserMode, strokes) {
-                        detectTapGestures { offset ->
-                            if (!isEditable) return@detectTapGestures
-                            val world = screenToWorld(offset, pan, scale)
-
-                            if (isEraser && eraserMode == EraseMode.STROKE) {
-                                val world = screenToWorld(offset, pan, scale)
-                                val candidates = strokes.asReversed().mapIndexedNotNull { idx, s ->
-                                    if (s.color == "#FFFFFF") return@mapIndexedNotNull null // ako želiš preskakati “paint erase” poteze
-                                    val d = distanceToStrokeWorld(world.x, world.y, s, scale)
-                                    val tol = maxOf(screenTolToWorld(scale), s.strokeWidth * 0.75f)
-                                    if (d <= tol) Hit(s, d, idx) else null
-                                }
-                                val toRemove = candidates.minWithOrNull(compareBy<Hit> { it.dist }.thenBy { it.z })?.stroke
-                                toRemove?.let { whiteboardViewModel.removeStroke(it.id) }
-                            }
-                            else if (!isEraser) {
-                                if (toolMode == ToolMode.TEXT) {
-                                    showTextInputDialog = true
-                                    textInputOffset = Offset(world.x, world.y) // spremi world lokaciju
-                                } else if (toolMode == ToolMode.POINTER) {
-                                    whiteboardViewModel.sendPointer(sessionId, Point(world.x, world.y))
-                                } else {
-                                    whiteboardViewModel.addStroke(
-                                        points = listOf(Point(world.x, world.y)),
-                                        color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
-                                        strokeWidth = strokeWidth
-                                    )
+                    // 1) Transform + double tap: SAMO u FREE_ROAM
+                    // transformable + hvatanje centroida: SAMO u FREE_ROAM
+                    .then(
+                        if (toolMode == ToolMode.FREE_ROAM)
+                            Modifier.pointerInput(toolMode) {
+                                detectTransformGestures(panZoomLock = true) { centroid, _, _, _ ->
+                                    lastCentroid = centroid
                                 }
                             }
-                        }
-
-                    }
-                    .pointerInput(isEditable, isEraser, eraserMode) {
-                        detectDragGestures(
-                            onDragStart = { startOffset ->
-                                if (!isEditable) return@detectDragGestures
-                                val w = screenToWorld(startOffset, pan, scale)
-                                currentPoints = listOf(Point(w.x, w.y))
-                                if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
-                                    currentPath = Path().apply { moveTo((w.x - pan.x) * scale, (w.y - pan.y) * scale) } // vidi napomenu dolje
-                                }
-                            },
-                            onDrag = { change, _ ->
-                                if (!isEditable) return@detectDragGestures
-                                val w = screenToWorld(change.position, pan, scale)
-                                val newPoint = Point(w.x, w.y)
-
-                                if (toolMode in listOf(ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE, ToolMode.SHAPE_LINE)) {
-                                    currentPoints = listOf(currentPoints.firstOrNull() ?: newPoint, newPoint)
-                                    return@detectDragGestures
-                                }
-
-                                when {
-                                    isEraser && eraserMode == EraseMode.COLOR -> {
-                                        currentPoints = currentPoints + newPoint
-                                        // ako koristiš Path za preview, Path radi u screen space-u:
-                                        currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
-                                    }
-                                    toolMode == ToolMode.DRAW -> {
-                                        currentPoints = currentPoints + newPoint
-                                        currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
-                                    }
-                                }
-                            },
-
-                            onDragEnd = {
-                                if (!isEditable) return@detectDragGestures
-                                val shouldAdd =
-                                    (toolMode == ToolMode.DRAW && currentPoints.size > 1) ||
-                                            (toolMode in listOf(ToolMode.SHAPE_LINE, ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE) && currentPoints.size == 2) ||
-                                            (isEraser && eraserMode == EraseMode.COLOR && currentPoints.size > 1)
-
-                                if (shouldAdd) {
-                                    val strokeColor = if (isEraser) {
-                                        String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
-                                    } else {
-                                        String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
-                                    }
-                                    val strokeWidthToUse = if (isEraser) eraserWidth else strokeWidth
-                                    val shapeType = when (toolMode) {
-                                        ToolMode.SHAPE_RECT -> "rect"
-                                        ToolMode.SHAPE_CIRCLE -> "circle"
-                                        ToolMode.SHAPE_LINE -> "line"
-                                        else -> null
-                                    }
-                                    whiteboardViewModel.addStroke(
-                                        points = currentPoints,          // world točke!
-                                        color = strokeColor,
-                                        strokeWidth = strokeWidthToUse,  // world debljina!
-                                        shapeType = shapeType
-                                    )
-                                }
-                                currentPoints = emptyList()
-                                currentPath = Path()
+                        else Modifier
+                    )
+                    // 2) Stvarni pan/zoom preko transformable + rememberTransformableState
+                    .then(
+                        if (toolMode == ToolMode.FREE_ROAM)
+                            Modifier.transformable(state = transformState)
+                        else Modifier
+                    )
+                    // 3) Double-tap reset
+                    .then(
+                        if (toolMode == ToolMode.FREE_ROAM)
+                            Modifier.pointerInput("free_roam_double_tap", scale, pan) {
+                                detectTapGestures(onDoubleTap = {
+                                    pan = Offset.Zero
+                                    scale = 1f
+                                })
                             }
+                        else Modifier
+                    )
+                    .then(
+                        if (toolMode != ToolMode.FREE_ROAM)
+                            Modifier.pointerInput(isEditable, isEraser, eraserMode, strokes, toolMode) {
+                                detectTapGestures { offset ->
+                                    if (!isEditable) return@detectTapGestures
+                                    val world = screenToWorld(offset, pan, scale)
 
+                                    if (isEraser && eraserMode == EraseMode.STROKE) {
+                                        val world = screenToWorld(offset, pan, scale)
+                                        val candidates = strokes.asReversed().mapIndexedNotNull { idx, s ->
+                                            if (s.color == "#FFFFFF") return@mapIndexedNotNull null // ako želiš preskakati “paint erase” poteze
+                                            val d = distanceToStrokeWorld(world.x, world.y, s, scale)
+                                            val tol = maxOf(screenTolToWorld(scale), s.strokeWidth * 0.75f)
+                                            if (d <= tol) Hit(s, d, idx) else null
+                                        }
+                                        val toRemove = candidates.minWithOrNull(compareBy<Hit> { it.dist }.thenBy { it.z })?.stroke
+                                        toRemove?.let { whiteboardViewModel.removeStroke(it.id) }
+                                    }
+                                    else if (!isEraser) {
+                                        if (toolMode == ToolMode.TEXT) {
+                                            showTextInputDialog = true
+                                            textInputOffset = Offset(world.x, world.y) // spremi world lokaciju
+                                        } else if (toolMode == ToolMode.POINTER) {
+                                            whiteboardViewModel.sendPointer(sessionId, Point(world.x, world.y))
+                                        } else {
+                                            whiteboardViewModel.addStroke(
+                                                points = listOf(Point(world.x, world.y)),
+                                                color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                                                strokeWidth = strokeWidth
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        else Modifier
+                    )
 
+                    .then(
+                        if (toolMode != ToolMode.FREE_ROAM)
+                            Modifier.pointerInput(isEditable, isEraser, eraserMode, toolMode) {
+                                detectDragGestures(
+                                    onDragStart = { startOffset ->
+                                        if (!isEditable) return@detectDragGestures
+                                        val w = screenToWorld(startOffset, pan, scale)
+                                        currentPoints = listOf(Point(w.x, w.y))
+                                        if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
+                                            currentPath = Path().apply { moveTo((w.x - pan.x) * scale, (w.y - pan.y) * scale) } // vidi napomenu dolje
+                                        }
+                                    },
+                                    onDrag = { change, _ ->
+                                        if (!isEditable) return@detectDragGestures
+                                        val w = screenToWorld(change.position, pan, scale)
+                                        val newPoint = Point(w.x, w.y)
 
-                        )
-                    }
+                                        if (toolMode in listOf(ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE, ToolMode.SHAPE_LINE)) {
+                                            currentPoints = listOf(currentPoints.firstOrNull() ?: newPoint, newPoint)
+                                            return@detectDragGestures
+                                        }
+
+                                        when {
+                                            isEraser && eraserMode == EraseMode.COLOR -> {
+                                                currentPoints = currentPoints + newPoint
+                                                // ako koristiš Path za preview, Path radi u screen space-u:
+                                                currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
+                                            }
+                                            toolMode == ToolMode.DRAW -> {
+                                                currentPoints = currentPoints + newPoint
+                                                currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        if (!isEditable) return@detectDragGestures
+                                        val shouldAdd =
+                                            (toolMode == ToolMode.DRAW && currentPoints.size > 1) ||
+                                                    (toolMode in listOf(ToolMode.SHAPE_LINE, ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE) && currentPoints.size == 2) ||
+                                                    (isEraser && eraserMode == EraseMode.COLOR && currentPoints.size > 1)
+
+                                        if (shouldAdd) {
+                                            val strokeColor = if (isEraser) {
+                                                String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
+                                            } else {
+                                                String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
+                                            }
+                                            val strokeWidthToUse = if (isEraser) eraserWidth else strokeWidth
+                                            val shapeType = when (toolMode) {
+                                                ToolMode.SHAPE_RECT -> "rect"
+                                                ToolMode.SHAPE_CIRCLE -> "circle"
+                                                ToolMode.SHAPE_LINE -> "line"
+                                                else -> null
+                                            }
+                                            whiteboardViewModel.addStroke(
+                                                points = currentPoints,          // world točke!
+                                                color = strokeColor,
+                                                strokeWidth = strokeWidthToUse,  // world debljina!
+                                                shapeType = shapeType
+                                            )
+                                        }
+                                        currentPoints = emptyList()
+                                        currentPath = Path()
+                                    }
+                                )
+                            }
+                        else Modifier
+                    )
 
             ) {
                 strokes.forEach { stroke ->
@@ -842,6 +873,14 @@ fun WhiteboardScreen(
                         }, colors = ButtonDefaults.textButtonColors(
                             containerColor = if (toolMode == ToolMode.POINTER) Color.LightGray else Color.Transparent
                         )) { Text("Pointer") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.FREE_ROAM, sessionId)
+                            showToolSelector = false
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.FREE_ROAM) Color.LightGray else Color.Transparent
+                        )) { Text("Free roam") }
+
                     }
                 },
                 confirmButton = {

@@ -6,5 +6,6 @@ enum class ToolMode {
     SHAPE_CIRCLE,
     SHAPE_LINE,
     TEXT,
-    POINTER
+    POINTER,
+    FREE_ROAM
 }
