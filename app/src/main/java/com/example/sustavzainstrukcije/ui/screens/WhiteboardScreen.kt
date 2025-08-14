@@ -75,8 +75,10 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.R
+import com.example.sustavzainstrukcije.ui.data.Aabb
 import com.example.sustavzainstrukcije.ui.data.DrawingStroke
 import com.example.sustavzainstrukcije.ui.data.EraseMode
+import com.example.sustavzainstrukcije.ui.data.Hit
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.ToolMode
 import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
@@ -89,6 +91,10 @@ import com.google.firebase.firestore.firestore
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
+
+private const val HIT_TOLERANCE_SCREEN_PX = 10f
+
+private fun screenTolToWorld(scale: Float): Float = HIT_TOLERANCE_SCREEN_PX / scale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -430,9 +436,17 @@ fun WhiteboardScreen(
                             val world = screenToWorld(offset, pan, scale)
 
                             if (isEraser && eraserMode == EraseMode.STROKE) {
-                                val strokeToRemove = strokes.lastOrNull { isTouchingStroke(it, world.x, world.y) }
-                                strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
-                            } else if (!isEraser) {
+                                val world = screenToWorld(offset, pan, scale)
+                                val candidates = strokes.asReversed().mapIndexedNotNull { idx, s ->
+                                    if (s.color == "#FFFFFF") return@mapIndexedNotNull null // ako želiš preskakati “paint erase” poteze
+                                    val d = distanceToStrokeWorld(world.x, world.y, s, scale)
+                                    val tol = maxOf(screenTolToWorld(scale), s.strokeWidth * 0.75f)
+                                    if (d <= tol) Hit(s, d, idx) else null
+                                }
+                                val toRemove = candidates.minWithOrNull(compareBy<Hit> { it.dist }.thenBy { it.z })?.stroke
+                                toRemove?.let { whiteboardViewModel.removeStroke(it.id) }
+                            }
+                            else if (!isEraser) {
                                 if (toolMode == ToolMode.TEXT) {
                                     showTextInputDialog = true
                                     textInputOffset = Offset(world.x, world.y) // spremi world lokaciju
@@ -1077,18 +1091,108 @@ fun ColorPickerDialog(
     )
 }
 
-fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
+fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): Float {
+    val worldTol = screenTolToWorld(scale)
+    val edgeTol = maxOf(worldTol, s.strokeWidth * 0.75f)
+    // Vrati minimalnu metriku udaljenosti po tipu (isti uvjeti kao u isTouchingStroke),
+    // ali BEZ praga, samo “koliko je daleko” (0..∞).
+    return when {
+        s.shapeType?.startsWith("text:") == true && s.points.size == 1 -> {
+            // bbox distance do pravokutnika (0 kada je unutra)
+            val textX = s.points[0].x
+            val textY = s.points[0].y
+            val font = s.shapeType.substringAfter("font=").substringBefore(";").toFloatOrNull()
+                ?: (s.strokeWidth * 6f)
+            val textH = font
+            val textLen = (s.shapeType.substringAfter("text:").substringBefore(";").length).coerceAtLeast(1)
+            val textW = 0.6f * font * textLen
+            val halfW = textW * 0.5f
+            val halfH = textH * 0.5f
+            val dx = maxOf(0f, abs(x - textX) - halfW)
+            val dy = maxOf(0f, abs(y - textY) - halfH)
+            sqrt(dx*dx + dy*dy)
+        }
+        s.shapeType == "circle" && s.points.size == 2 -> {
+            val p1 = s.points[0]; val p2 = s.points[1]
+            val cx = (p1.x + p2.x)/2f; val cy = (p1.y + p2.y)/2f
+            val r = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
+            abs(sqrt((x - cx).pow(2) + (y - cy).pow(2)) - r)
+        }
+        s.shapeType == "rect" && s.points.size == 2 -> {
+            val left = minOf(s.points[0].x, s.points[1].x)
+            val right = maxOf(s.points[0].x, s.points[1].x)
+            val top = minOf(s.points[0].y, s.points[1].y)
+            val bottom = maxOf(s.points[0].y, s.points[1].y)
+            // dist do rubova okvira (min od 4 ruba), 0 ako si na rubu; izvan “unutrašnjosti” vraća udaljenost do najbližeg ruba
+            val dxLeft = abs(x - left)
+            val dxRight = abs(x - right)
+            val dyTop = abs(y - top)
+            val dyBottom = abs(y - bottom)
+            val insideHoriz = x in left..right
+            val insideVert = y in top..bottom
+            when {
+                insideHoriz -> minOf(dyTop, dyBottom)
+                insideVert -> minOf(dxLeft, dxRight)
+                else -> {
+                    // do najbližeg kuta
+                    val cx = if (x < left) left else right
+                    val cy = if (y < top) top else bottom
+                    sqrt((x - cx)*(x - cx) + (y - cy)*(y - cy))
+                }
+            }
+        }
+        s.shapeType == "line" && s.points.size == 2 -> {
+            val (x1, y1) = s.points[0]
+            val (x2, y2) = s.points[1]
+            pointToSegmentDistance(x, y, x1, y1, x2, y2)
+        }
+        else -> {
+            val pts = s.points
+            if (pts.size == 1) {
+                val dx = pts[0].x - x; val dy = pts[0].y - y
+                sqrt(dx*dx + dy*dy)
+            } else {
+                var minDist = Float.POSITIVE_INFINITY
+                for (i in 0 until pts.size - 1) {
+                    val d = pointToSegmentDistance(x, y, pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
+                    if (d < minDist) minDist = d
+                }
+                minDist
+            }
+        }
+    }
+}
+
+fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float, scale: Float): Boolean {
     if (stroke.color == "#FFFFFF") return false
+
+    val worldTol = screenTolToWorld(scale)
+    val edgeTol = maxOf(worldTol, stroke.strokeWidth * 0.75f)
+
+    val bboxMargin = maxOf(worldTol, stroke.strokeWidth)
+    val aabb = AabbExpand(strokeAabb(stroke), bboxMargin)
+    if (!inAabb(x, y, aabb)) return false
+
 
     return when {
         stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
             val textX = stroke.points[0].x
             val textY = stroke.points[0].y
-            val fontSize = stroke.shapeType.substringAfter("font=")
-                .substringBefore(";")
-                .toFloatOrNull() ?: (stroke.strokeWidth * 6)
-            val tolerance = fontSize
-            abs(x - textX) < tolerance * 4 && abs(y - textY) < tolerance
+            val fontSizeWorld = stroke.shapeType.substringAfter("font=").substringBefore(";").toFloatOrNull()
+                ?: (stroke.strokeWidth * 6f)
+
+            // gruba aproksimacija širine/visine teksta u world prostoru
+            val textH = fontSizeWorld
+            val textLen = (stroke.shapeType.substringAfter("text:").substringBefore(";").length).coerceAtLeast(1)
+            val textW = 0.6f * fontSizeWorld * textLen
+
+            val halfW = textW * 0.5f
+            val halfH = textH * 0.5f
+            val tol = worldTol
+
+            x in (textX - halfW - tol)..(textX + halfW + tol) &&
+                    y in (textY - halfH - tol)..(textY + halfH + tol)
+
         }
 
         stroke.shapeType == "circle" && stroke.points.size == 2 -> {
@@ -1098,7 +1202,7 @@ fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
             val centerY = (p1.y + p2.y) / 2
             val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2
             val distance = sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
-            abs(distance - radius) < stroke.strokeWidth * 1.5f
+            abs(distance - radius) < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
         }
 
         stroke.shapeType == "rect" && stroke.points.size == 2 -> {
@@ -1106,7 +1210,7 @@ fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
             val right = maxOf(stroke.points[0].x, stroke.points[1].x)
             val top = minOf(stroke.points[0].y, stroke.points[1].y)
             val bottom = maxOf(stroke.points[0].y, stroke.points[1].y)
-            val border = stroke.strokeWidth * 1.5f
+            val border = maxOf(edgeTol, stroke.strokeWidth * 0.5f)
 
             val isNearLeft = abs(x - left) < border && y in top..bottom
             val isNearRight = abs(x - right) < border && y in top..bottom
@@ -1123,24 +1227,64 @@ fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
             if (lineLength == 0f) return false
 
             val distance = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) / lineLength
-            val minX = minOf(x1, x2) - stroke.strokeWidth
-            val maxX = maxOf(x1, x2) + stroke.strokeWidth
-            val minY = minOf(y1, y2) - stroke.strokeWidth
-            val maxY = maxOf(y1, y2) + stroke.strokeWidth
+            val margin = maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+            val minX = minOf(x1, x2) - margin
+            val maxX = maxOf(x1, x2) + margin
+            val minY = minOf(y1, y2) - margin
+            val maxY = maxOf(y1, y2) + margin
 
-            distance < stroke.strokeWidth * 1.5f && x in minX..maxX && y in minY..maxY
+
+            distance < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
         }
 
         else -> {
-            stroke.points.any {
-                val dx = it.x - x
-                val dy = it.y - y
-                sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+            val pts = stroke.points
+            if (pts.size == 1) {
+                // točkasti hit
+                val dx = pts[0].x - x
+                val dy = pts[0].y - y
+                sqrt(dx*dx + dy*dy) < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+            } else {
+                // udaljenost do najbližeg segmenta
+                var minDist = Float.POSITIVE_INFINITY
+                for (i in 0 until pts.size - 1) {
+                    val d = pointToSegmentDistance(x, y, pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
+                    if (d < minDist) minDist = d
+                }
+                minDist < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
             }
         }
+
     }
 }
 
+private fun pointToSegmentDistance(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+    val dx = x2 - x1
+    val dy = y2 - y1
+    if (dx == 0f && dy == 0f) {
+        val dxp = px - x1
+        val dyp = py - y1
+        return sqrt(dxp*dxp + dyp*dyp)
+    }
+    val t = ((px - x1)*dx + (py - y1)*dy) / (dx*dx + dy*dy)
+    val clamped = t.coerceIn(0f, 1f)
+    val projX = x1 + clamped*dx
+    val projY = y1 + clamped*dy
+    val ddx = px - projX
+    val ddy = py - projY
+    return sqrt(ddx*ddx + ddy*ddy)
+}
+
+private fun strokeAabb(s: DrawingStroke): Aabb {
+    val xs = s.points.map { it.x }
+    val ys = s.points.map { it.y }
+    return Aabb(xs.minOrNull() ?: 0f, ys.minOrNull() ?: 0f, xs.maxOrNull() ?: 0f, ys.maxOrNull() ?: 0f)
+}
+
+private fun AabbExpand(a: Aabb, m: Float) = Aabb(a.minX - m, a.minY - m, a.maxX + m, a.maxY + m)
+
+private fun inAabb(x: Float, y: Float, a: Aabb) =
+    x >= a.minX && x <= a.maxX && y >= a.minY && y <= a.maxY
 
 
 
