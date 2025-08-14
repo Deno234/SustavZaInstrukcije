@@ -185,7 +185,7 @@ fun WhiteboardScreen(
             val worldAfter = screenToWorld(lastCentroid, pan, scale)
             pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
         }
-        pan += offsetChange / scale
+        pan -= offsetChange / scale
     }
 
 
