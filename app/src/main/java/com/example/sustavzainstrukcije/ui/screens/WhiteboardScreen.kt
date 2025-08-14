@@ -432,24 +432,32 @@ fun WhiteboardScreen(
                     // 1) Transform + double tap: SAMO u FREE_ROAM
                     // transformable + hvatanje centroida: SAMO u FREE_ROAM
                     .then(
-                        if (toolMode == ToolMode.FREE_ROAM)
-                            Modifier.pointerInput(toolMode) {
-                                detectTransformGestures(panZoomLock = true) { centroid, _, _, _ ->
-                                    lastCentroid = centroid
+                        if (toolMode == ToolMode.FREE_ROAM && !isEraser) {
+                            Modifier.pointerInput(Unit) {
+                                detectTransformGestures(panZoomLock = true) { centroid, panChange, zoomChange, _ ->
+                                    val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
+
+                                    // Zoom tako da prsti ostanu na istom mjestu u world koordinatama
+                                    if (newScale != scale) {
+                                        val worldBefore = screenToWorld(centroid, pan, scale)
+                                        scale = newScale
+                                        val worldAfter = screenToWorld(centroid, pan, scale)
+                                        pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
+                                    }
+
+                                    // Pan
+                                    pan -= panChange / scale
                                 }
                             }
-                        else Modifier
-                    )
-                    // 2) Stvarni pan/zoom preko transformable + rememberTransformableState
-                    .then(
-                        if (toolMode == ToolMode.FREE_ROAM)
-                            Modifier.transformable(state = transformState)
-                        else Modifier
+                        } else {
+                            Modifier // ostalo ponašanje za druge alate
+                        }
+
                     )
                     // 3) Double-tap reset
                     .then(
-                        if (toolMode == ToolMode.FREE_ROAM)
-                            Modifier.pointerInput("free_roam_double_tap", scale, pan) {
+                        if (toolMode == ToolMode.FREE_ROAM && !isEraser)
+                            Modifier.pointerInput(toolMode, scale, pan) {
                                 detectTapGestures(onDoubleTap = {
                                     pan = Offset.Zero
                                     scale = 1f
@@ -458,7 +466,7 @@ fun WhiteboardScreen(
                         else Modifier
                     )
                     .then(
-                        if (toolMode != ToolMode.FREE_ROAM)
+                        if (toolMode != ToolMode.FREE_ROAM || isEraser)
                             Modifier.pointerInput(isEditable, isEraser, eraserMode, strokes, toolMode) {
                                 detectTapGestures { offset ->
                                     if (!isEditable) return@detectTapGestures
@@ -495,7 +503,7 @@ fun WhiteboardScreen(
                     )
 
                     .then(
-                        if (toolMode != ToolMode.FREE_ROAM)
+                        if (toolMode != ToolMode.FREE_ROAM || isEraser)
                             Modifier.pointerInput(isEditable, isEraser, eraserMode, toolMode) {
                                 detectDragGestures(
                                     onDragStart = { startOffset ->
@@ -1132,7 +1140,13 @@ fun ColorPickerDialog(
 
 fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): Float {
     val worldTol = screenTolToWorld(scale)
-    val edgeTol = maxOf(worldTol, s.strokeWidth * 0.75f)
+    val halfStroke = s.strokeWidth * 0.5f
+    val edgeTol = maxOf(worldTol, halfStroke)
+    val bboxMargin = maxOf(worldTol, s.strokeWidth)
+
+    val aabb = AabbExpand(strokeAabb(s), bboxMargin)
+    if (!inAabb(x, y, aabb)) return Float.POSITIVE_INFINITY
+
     // Vrati minimalnu metriku udaljenosti po tipu (isti uvjeti kao u isTouchingStroke),
     // ali BEZ praga, samo “koliko je daleko” (0..∞).
     return when {
@@ -1203,99 +1217,82 @@ fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): F
 }
 
 fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float, scale: Float): Boolean {
+    // Ako želiš da Remove Stroke pogađa i “white paint” tragove, ukloni ovu liniju:
     if (stroke.color == "#FFFFFF") return false
 
     val worldTol = screenTolToWorld(scale)
-    val edgeTol = maxOf(worldTol, stroke.strokeWidth * 0.75f)
-
+    val halfStroke = stroke.strokeWidth * 0.5f
+    val edgeTol = maxOf(worldTol, halfStroke)
     val bboxMargin = maxOf(worldTol, stroke.strokeWidth)
+
     val aabb = AabbExpand(strokeAabb(stroke), bboxMargin)
     if (!inAabb(x, y, aabb)) return false
 
-
     return when {
         stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
+            // Koristi worldTol za “unutra” proširenje
             val textX = stroke.points[0].x
             val textY = stroke.points[0].y
             val fontSizeWorld = stroke.shapeType.substringAfter("font=").substringBefore(";").toFloatOrNull()
                 ?: (stroke.strokeWidth * 6f)
-
-            // gruba aproksimacija širine/visine teksta u world prostoru
             val textH = fontSizeWorld
             val textLen = (stroke.shapeType.substringAfter("text:").substringBefore(";").length).coerceAtLeast(1)
             val textW = 0.6f * fontSizeWorld * textLen
-
             val halfW = textW * 0.5f
             val halfH = textH * 0.5f
-            val tol = worldTol
-
-            x in (textX - halfW - tol)..(textX + halfW + tol) &&
-                    y in (textY - halfH - tol)..(textY + halfH + tol)
-
+            x in (textX - halfW - worldTol)..(textX + halfW + worldTol) &&
+                    y in (textY - halfH - worldTol)..(textY + halfH + worldTol)
         }
-
         stroke.shapeType == "circle" && stroke.points.size == 2 -> {
-            val p1 = stroke.points[0]
-            val p2 = stroke.points[1]
-            val centerX = (p1.x + p2.x) / 2
-            val centerY = (p1.y + p2.y) / 2
-            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2
+            val p1 = stroke.points[0]; val p2 = stroke.points[1]
+            val centerX = (p1.x + p2.x) / 2f
+            val centerY = (p1.y + p2.y) / 2f
+            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
             val distance = sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
-            abs(distance - radius) < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+            abs(distance - radius) < edgeTol
         }
-
         stroke.shapeType == "rect" && stroke.points.size == 2 -> {
             val left = minOf(stroke.points[0].x, stroke.points[1].x)
             val right = maxOf(stroke.points[0].x, stroke.points[1].x)
             val top = minOf(stroke.points[0].y, stroke.points[1].y)
             val bottom = maxOf(stroke.points[0].y, stroke.points[1].y)
-            val border = maxOf(edgeTol, stroke.strokeWidth * 0.5f)
-
+            val border = edgeTol
             val isNearLeft = abs(x - left) < border && y in top..bottom
             val isNearRight = abs(x - right) < border && y in top..bottom
             val isNearTop = abs(y - top) < border && x in left..right
             val isNearBottom = abs(y - bottom) < border && x in left..right
-
             isNearLeft || isNearRight || isNearTop || isNearBottom
         }
-
         stroke.shapeType == "line" && stroke.points.size == 2 -> {
             val (x1, y1) = stroke.points[0]
             val (x2, y2) = stroke.points[1]
-            val lineLength = sqrt((x2 - x1).pow(2) + (y2 - y1).pow(2))
-            if (lineLength == 0f) return false
-
-            val distance = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) / lineLength
-            val margin = maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+            val distance = pointToSegmentDistance(x, y, x1, y1, x2, y2)
+            // BBox s istim marginom kao i distance prag
+            val margin = edgeTol
             val minX = minOf(x1, x2) - margin
             val maxX = maxOf(x1, x2) + margin
             val minY = minOf(y1, y2) - margin
             val maxY = maxOf(y1, y2) + margin
-
-
-            distance < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+            x in minX..maxX && y in minY..maxY && distance < edgeTol
         }
-
         else -> {
             val pts = stroke.points
             if (pts.size == 1) {
-                // točkasti hit
                 val dx = pts[0].x - x
                 val dy = pts[0].y - y
-                sqrt(dx*dx + dy*dy) < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+                sqrt(dx*dx + dy*dy) < edgeTol
             } else {
-                // udaljenost do najbližeg segmenta
                 var minDist = Float.POSITIVE_INFINITY
                 for (i in 0 until pts.size - 1) {
                     val d = pointToSegmentDistance(x, y, pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
                     if (d < minDist) minDist = d
                 }
-                minDist < maxOf(edgeTol, stroke.strokeWidth * 0.5f)
+                minDist < edgeTol
             }
         }
-
     }
 }
+
 
 private fun pointToSegmentDistance(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
     val dx = x2 - x1
