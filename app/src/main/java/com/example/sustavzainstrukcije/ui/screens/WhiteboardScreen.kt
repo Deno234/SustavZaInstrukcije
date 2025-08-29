@@ -8,6 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,8 +77,10 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.R
+import com.example.sustavzainstrukcije.ui.data.Aabb
 import com.example.sustavzainstrukcije.ui.data.DrawingStroke
 import com.example.sustavzainstrukcije.ui.data.EraseMode
+import com.example.sustavzainstrukcije.ui.data.Hit
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.ToolMode
 import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
@@ -88,6 +93,10 @@ import com.google.firebase.firestore.firestore
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
+
+private const val HIT_TOLERANCE_SCREEN_PX = 10f
+
+private fun screenTolToWorld(scale: Float): Float = HIT_TOLERANCE_SCREEN_PX / scale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -153,6 +162,34 @@ fun WhiteboardScreen(
 
     val canUndo by whiteboardViewModel.canUndo.collectAsState()
     val canRedo by whiteboardViewModel.canRedo.collectAsState()
+
+
+    var pan by remember { mutableStateOf(Offset.Zero) }      // world offset
+    var scale by remember { mutableFloatStateOf(1f) }        // 1f = 100%
+    val minScale = 0.25f
+    val maxScale = 5f
+
+    fun worldToScreen(p: Point, pan: Offset, scale: Float) =
+        Offset((p.x - pan.x) * scale, (p.y - pan.y) * scale)
+
+    fun screenToWorld(o: Offset, pan: Offset, scale: Float) =
+        Point(o.x / scale + pan.x, o.y / scale + pan.y)
+
+    var lastCentroid by remember { mutableStateOf(Offset.Zero) }
+
+    val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
+        val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
+        if (newScale != scale) {
+            val worldBefore = screenToWorld(lastCentroid, pan, scale)
+            scale = newScale
+            val worldAfter = screenToWorld(lastCentroid, pan, scale)
+            pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
+        }
+        pan -= offsetChange / scale
+    }
+
+
+
 
     DisposableEffect(sessionId, currentUserId) {
         if (currentUserIsInstructor) {
@@ -392,234 +429,246 @@ fun WhiteboardScreen(
                     .fillMaxSize()
                     .clipToBounds()
                     .background(Color.White)
-                    .pointerInput(isEditable, isEraser, eraserMode, strokes) {
-                        detectTapGestures { offset ->
-                            if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height || !isEditable) {
-                                return@detectTapGestures
-                            }
-                            if (isEraser && eraserMode == EraseMode.STROKE) {
-                                // Pronađi i obriši stroke na toj poziciji
-                                val strokeToRemove = strokes.lastOrNull { isTouchingStroke(it, offset.x, offset.y) }
-                                strokeToRemove?.let { whiteboardViewModel.removeStroke(it.id) }
-                            } else if (!isEraser) {
-                                if (toolMode == ToolMode.TEXT) {
-                                    showTextInputDialog = true
-                                    textInputOffset = offset
-                                } else if (toolMode == ToolMode.POINTER) {
-                                    whiteboardViewModel.sendPointer(sessionId, Point(offset.x, offset.y))
-                                    return@detectTapGestures
-                                }
-                                    else {
-                                    // Normalni tap za crtanje točke
-                                    val singlePoint = listOf(Point(offset.x, offset.y))
-                                    whiteboardViewModel.addStroke(
-                                        points = singlePoint,
-                                        color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
-                                        strokeWidth = strokeWidth
-                                    )
+                    // 1) Transform + double tap: SAMO u FREE_ROAM
+                    // transformable + hvatanje centroida: SAMO u FREE_ROAM
+                    .then(
+                        if (toolMode == ToolMode.FREE_ROAM && !isEraser) {
+                            Modifier.pointerInput(Unit) {
+                                detectTransformGestures(panZoomLock = true) { centroid, panChange, zoomChange, _ ->
+                                    val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
+
+                                    // Zoom tako da prsti ostanu na istom mjestu u world koordinatama
+                                    if (newScale != scale) {
+                                        val worldBefore = screenToWorld(centroid, pan, scale)
+                                        scale = newScale
+                                        val worldAfter = screenToWorld(centroid, pan, scale)
+                                        pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
+                                    }
+
+                                    // Pan
+                                    pan -= panChange / scale
                                 }
                             }
+                        } else {
+                            Modifier // ostalo ponašanje za druge alate
                         }
-                    }
-                    .pointerInput(isEditable, isEraser, eraserMode) {
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                if (offset.x < 0 || offset.y < 0 || offset.x > size.width || offset.y > size.height || !isEditable) return@detectDragGestures
 
-                                currentPoints = listOf(Point(offset.x, offset.y))
+                    )
+                    // 3) Double-tap reset
+                    .then(
+                        if (toolMode == ToolMode.FREE_ROAM && !isEraser)
+                            Modifier.pointerInput(toolMode, scale, pan) {
+                                detectTapGestures(onDoubleTap = {
+                                    pan = Offset.Zero
+                                    scale = 1f
+                                })
+                            }
+                        else Modifier
+                    )
+                    .then(
+                        if (toolMode != ToolMode.FREE_ROAM || isEraser)
+                            Modifier.pointerInput(isEditable, isEraser, eraserMode, strokes, toolMode) {
+                                detectTapGestures { offset ->
+                                    if (!isEditable) return@detectTapGestures
+                                    val world = screenToWorld(offset, pan, scale)
 
-                                if (isEraser && eraserMode == EraseMode.STROKE) {
-                                    val strokeToRemove = strokes.lastOrNull { stroke ->
-                                        if (stroke.color == "#FFFFFF") return@lastOrNull false
-                                        stroke.points.any { point ->
-                                            val dx = point.x - offset.x
-                                            val dy = point.y - offset.y
-                                            sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+                                    if (isEraser && eraserMode == EraseMode.STROKE) {
+                                        val world = screenToWorld(offset, pan, scale)
+                                        val candidates = strokes.asReversed().mapIndexedNotNull { idx, s ->
+                                            if (s.color == "#FFFFFF") return@mapIndexedNotNull null // ako želiš preskakati “paint erase” poteze
+                                            val d = distanceToStrokeWorld(world.x, world.y, s, scale)
+                                            val tol = maxOf(screenTolToWorld(scale), s.strokeWidth * 0.75f)
+                                            if (d <= tol) Hit(s, d, idx) else null
+                                        }
+                                        val toRemove = candidates.minWithOrNull(compareBy<Hit> { it.dist }.thenBy { it.z })?.stroke
+                                        toRemove?.let { whiteboardViewModel.removeStroke(it.id) }
+                                    }
+                                    else if (!isEraser) {
+                                        if (toolMode == ToolMode.TEXT) {
+                                            showTextInputDialog = true
+                                            textInputOffset = Offset(world.x, world.y) // spremi world lokaciju
+                                        } else if (toolMode == ToolMode.POINTER) {
+                                            whiteboardViewModel.sendPointer(sessionId, Point(world.x, world.y))
+                                        } else {
+                                            whiteboardViewModel.addStroke(
+                                                points = listOf(Point(world.x, world.y)),
+                                                color = String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF),
+                                                strokeWidth = strokeWidth
+                                            )
                                         }
                                     }
-                                    strokeToRemove?.let {
-                                        whiteboardViewModel.removeStroke(it.id)
-                                    }
-
-                                    return@detectDragGestures
                                 }
-
-
-                                if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
-                                    currentPath = Path().apply { moveTo(offset.x, offset.y) }
-                                }
-                            },
-                            onDrag = { change, _ ->
-                                if (!isEditable) return@detectDragGestures
-                                val newPoint = Point(change.position.x, change.position.y)
-
-                                // Za oblike: uvijek se čuva početna i krajnja točka
-                                if (toolMode == ToolMode.SHAPE_RECT || toolMode == ToolMode.SHAPE_CIRCLE || toolMode == ToolMode.SHAPE_LINE) {
-                                    currentPoints = listOf(currentPoints.firstOrNull() ?: newPoint, newPoint)
-                                    return@detectDragGestures
-                                }
-
-                                when {
-                                    isEraser && eraserMode == EraseMode.COLOR -> {
-                                        currentPoints = currentPoints + newPoint
-                                        currentPath.lineTo(newPoint.x, newPoint.y)
-                                    }
-
-                                    toolMode == ToolMode.DRAW -> {
-                                        currentPoints = currentPoints + newPoint
-                                        currentPath.lineTo(newPoint.x, newPoint.y)
-                                    }
-                                }
-                            },
-
-                            onDragEnd = {
-                                if (!isEditable) return@detectDragGestures
-                                val shouldAdd = when {
-                                    toolMode == ToolMode.DRAW && currentPoints.size > 1 -> true
-                                    toolMode in listOf(ToolMode.SHAPE_LINE, ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE) && currentPoints.size == 2 -> true
-                                    isEraser && eraserMode == EraseMode.COLOR && currentPoints.size > 1 -> true
-                                    else -> false
-                                }
-
-                                if (shouldAdd) {
-                                    val strokeColor = if (isEraser) {
-                                        String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
-                                    } else {
-                                        String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
-                                    }
-
-                                    val strokeWidthToUse =
-                                        if (isEraser) eraserWidth else strokeWidth
-
-                                    val shapeType = when (toolMode) {
-                                        ToolMode.SHAPE_RECT -> "rect"
-                                        ToolMode.SHAPE_CIRCLE -> "circle"
-                                        ToolMode.SHAPE_LINE -> "line"
-                                        else -> null
-                                    }
-
-                                    whiteboardViewModel.addStroke(
-                                        points = currentPoints,
-                                        color = strokeColor,
-                                        strokeWidth = strokeWidthToUse,
-                                        shapeType = shapeType
-                                    )
-                                }
-
-                                currentPoints = emptyList()
-                                currentPath = Path()
                             }
+                        else Modifier
+                    )
 
+                    .then(
+                        if (toolMode != ToolMode.FREE_ROAM || isEraser)
+                            Modifier.pointerInput(isEditable, isEraser, eraserMode, toolMode) {
+                                detectDragGestures(
+                                    onDragStart = { startOffset ->
+                                        if (!isEditable) return@detectDragGestures
+                                        val w = screenToWorld(startOffset, pan, scale)
+                                        currentPoints = listOf(Point(w.x, w.y))
+                                        if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
+                                            currentPath = Path().apply { moveTo((w.x - pan.x) * scale, (w.y - pan.y) * scale) } // vidi napomenu dolje
+                                        }
+                                    },
+                                    onDrag = { change, _ ->
+                                        if (!isEditable) return@detectDragGestures
+                                        val w = screenToWorld(change.position, pan, scale)
+                                        val newPoint = Point(w.x, w.y)
 
-                        )
-                    }
+                                        if (toolMode in listOf(ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE, ToolMode.SHAPE_LINE)) {
+                                            currentPoints = listOf(currentPoints.firstOrNull() ?: newPoint, newPoint)
+                                            return@detectDragGestures
+                                        }
+
+                                        when {
+                                            isEraser && eraserMode == EraseMode.COLOR -> {
+                                                currentPoints = currentPoints + newPoint
+                                                // ako koristiš Path za preview, Path radi u screen space-u:
+                                                currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
+                                            }
+                                            toolMode == ToolMode.DRAW -> {
+                                                currentPoints = currentPoints + newPoint
+                                                currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        if (!isEditable) return@detectDragGestures
+                                        val shouldAdd =
+                                            (toolMode == ToolMode.DRAW && currentPoints.size > 1) ||
+                                                    (toolMode in listOf(ToolMode.SHAPE_LINE, ToolMode.SHAPE_RECT, ToolMode.SHAPE_CIRCLE) && currentPoints.size == 2) ||
+                                                    (isEraser && eraserMode == EraseMode.COLOR && currentPoints.size > 1)
+
+                                        if (shouldAdd) {
+                                            val strokeColor = if (isEraser) {
+                                                String.format("#%06X", Color.White.toArgb() and 0xFFFFFF)
+                                            } else {
+                                                String.format("#%06X", selectedColor.toArgb() and 0xFFFFFF)
+                                            }
+                                            val strokeWidthToUse = if (isEraser) eraserWidth else strokeWidth
+                                            val shapeType = when (toolMode) {
+                                                ToolMode.SHAPE_RECT -> "rect"
+                                                ToolMode.SHAPE_CIRCLE -> "circle"
+                                                ToolMode.SHAPE_LINE -> "line"
+                                                else -> null
+                                            }
+                                            whiteboardViewModel.addStroke(
+                                                points = currentPoints,          // world točke!
+                                                color = strokeColor,
+                                                strokeWidth = strokeWidthToUse,  // world debljina!
+                                                shapeType = shapeType
+                                            )
+                                        }
+                                        currentPoints = emptyList()
+                                        currentPath = Path()
+                                    }
+                                )
+                            }
+                        else Modifier
+                    )
 
             ) {
                 strokes.forEach { stroke ->
                     if (stroke.points.isNotEmpty()) {
-                        val color = Color(stroke.color.toColorInt())
                         when {
                             stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
 
-                                val full = stroke.shapeType
+                                val sp = worldToScreen(stroke.points[0], pan, scale)
+                                val full = stroke.shapeType ?: ""
                                 val text = full.substringAfter("text:").substringBefore(";")
-                                val fontSize = full.substringAfter("font=").substringBefore(";")
-                                    .toFloatOrNull() ?: (stroke.strokeWidth * 6)
+                                val fontSize = full.substringAfter("font=").substringBefore(";").toFloatOrNull()
+                                    ?: (stroke.strokeWidth * 6)
                                 val isBold = full.substringAfter("bold=").toBooleanStrictOrNull() ?: false
 
                                 drawContext.canvas.nativeCanvas.drawText(
                                     text,
-                                    stroke.points[0].x,
-                                    stroke.points[0].y,
+                                    sp.x,
+                                    sp.y,
                                     android.graphics.Paint().apply {
-                                        this.color = stroke.color.toColorInt()
-                                        textSize = fontSize
+                                        color = stroke.color.toColorInt()
+                                        textSize = fontSize * scale
                                         isFakeBoldText = isBold
                                         isAntiAlias = true
                                     }
                                 )
+
                             }
 
                             stroke.points.size == 1 -> {
-                                val point = stroke.points.first()
+                                val sp = worldToScreen(stroke.points.first(), pan, scale)
                                 drawCircle(
-                                    color = color,
-                                    radius = stroke.strokeWidth / 2f,
-                                    center = Offset(point.x, point.y)
+                                    color = Color(stroke.color.toColorInt()),
+                                    radius = (stroke.strokeWidth / 2f) * scale,
+                                    center = sp
                                 )
                             }
 
                             stroke.points.size == 2 && stroke.shapeType != null -> {
-                                val p1 = Offset(stroke.points[0].x, stroke.points[0].y)
-                                val p2 = Offset(stroke.points[1].x, stroke.points[1].y)
-
+                                val p1 = worldToScreen(stroke.points[0], pan, scale)
+                                val p2 = worldToScreen(stroke.points[1], pan, scale)
                                 when (stroke.shapeType) {
-                                    "rect" -> drawRect(
-                                        color = color,
-                                        topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
-                                        size = androidx.compose.ui.geometry.Size(
-                                            width = abs(p2.x - p1.x),
-                                            height = abs(p2.y - p1.y)
-                                        ),
-                                        style = Stroke(width = stroke.strokeWidth)
-                                    )
-
-                                    "circle" -> {
-                                        val radius =
-                                            sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
-                                        val center = Offset((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
-                                        drawCircle(
-                                            color = color,
-                                            radius = radius,
-                                            center = center,
-                                            style = Stroke(width = stroke.strokeWidth)
-                                        )
-                                    }
-
                                     "line" -> drawLine(
-                                        color = color,
-                                        start = p1,
-                                        end = p2,
-                                        strokeWidth = stroke.strokeWidth,
+                                        color = Color(stroke.color.toColorInt()),
+                                        start = p1, end = p2,
+                                        strokeWidth = stroke.strokeWidth * scale,
                                         cap = StrokeCap.Round
                                     )
+                                    "rect" -> drawRect(
+                                        color = Color(stroke.color.toColorInt()),
+                                        topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
+                                        size = androidx.compose.ui.geometry.Size(abs(p2.x - p1.x), abs(p2.y - p1.y)),
+                                        style = Stroke(width = stroke.strokeWidth * scale)
+                                    )
+                                    "circle" -> {
+                                        val radius = kotlin.math.sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
+                                        val center = Offset((p1.x + p2.x) / 2f, (p1.y + p2.y) / 2f)
+                                        drawCircle(
+                                            color = Color(stroke.color.toColorInt()),
+                                            radius = radius,
+                                            center = center,
+                                            style = Stroke(width = stroke.strokeWidth * scale)
+                                        )
+                                    }
                                 }
                             }
 
                             stroke.shapeType == null && stroke.points.size > 1 -> {
-                                val path = Path().apply {
-                                    moveTo(stroke.points[0].x, stroke.points[0].y)
-                                    for (point in stroke.points.drop(1)) {
-                                        lineTo(point.x, point.y)
+                                val pts = stroke.points
+                                if (pts.size > 1) {
+                                    val sp0 = worldToScreen(pts[0], pan, scale)
+                                    val path = Path().apply {
+                                        moveTo(sp0.x, sp0.y)
+                                        for (p in pts.drop(1)) {
+                                            val sp = worldToScreen(p, pan, scale)
+                                            lineTo(sp.x, sp.y)
+                                        }
                                     }
-                                }
-                                drawPath(
-                                    path = path,
-                                    color = color,
-                                    style = Stroke(
-                                        width = stroke.strokeWidth,
-                                        cap = StrokeCap.Round,
-                                        join = StrokeJoin.Round
+                                    drawPath(
+                                        path = path,
+                                        color = Color(stroke.color.toColorInt()),
+                                        style = Stroke(
+                                            width = stroke.strokeWidth * scale,
+                                            cap = StrokeCap.Round,
+                                            join = StrokeJoin.Round
+                                        )
                                     )
-                                )
+                                }
+
                             }
                         }
                     }
                 }
 
                 pointers.forEach { (userId, point) ->
-                    drawCircle(
-                        color = Color.Red,
-                        center = Offset(point.x, point.y),
-                        radius = 10f
-                    )
-
+                    val sp = worldToScreen(point, pan, scale)
+                    drawCircle(Color.Red, center = sp, radius = 10f) // možeš držati fiksno 10f u screen space-u
                     val label = userNames[userId] ?: userId.take(6)
-
                     drawContext.canvas.nativeCanvas.drawText(
-                        label,
-                        point.x + 12,
-                        point.y - 12,
+                        label, sp.x + 12, sp.y - 12,
                         android.graphics.Paint().apply {
                             color = android.graphics.Color.BLACK
                             textSize = 28f
@@ -629,29 +678,22 @@ fun WhiteboardScreen(
                 }
 
 
+
                 if (isEraser && currentPoints.isNotEmpty()) {
-                    val lastPoint = currentPoints.last()
-
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.6f),
-                        radius = eraserWidth / 2f,
-                        center = Offset(lastPoint.x, lastPoint.y)
-                    )
-
-                    drawCircle(
-                        color = Color.Gray,
-                        radius = eraserWidth / 2f,
-                        center = Offset(lastPoint.x, lastPoint.y),
-                        style = Stroke(width = 2f)
-                    )
+                    val lastWorld = currentPoints.last()
+                    val sp = worldToScreen(lastWorld, pan, scale)
+                    val r = (eraserWidth / 2f) * scale
+                    drawCircle(Color.White.copy(alpha = 0.6f), radius = r, center = sp)
+                    drawCircle(Color.Gray, radius = r, center = sp, style = Stroke(width = 2f))
                 }
+
 
                 if (currentPoints.isNotEmpty() && (!isEraser || eraserMode != EraseMode.STROKE)) {
                     drawPath(
                         path = currentPath,
                         color = colorToUse,
                         style = Stroke(
-                            width = if (isEraser) eraserWidth else strokeWidth,
+                            width = (if (isEraser) eraserWidth else strokeWidth) * scale,
                             cap = StrokeCap.Round,
                             join = StrokeJoin.Round
                         )
@@ -659,42 +701,35 @@ fun WhiteboardScreen(
                 }
 
                 if (currentPoints.size == 2 && !isEraser) {
-                    val p1 = Offset(currentPoints[0].x, currentPoints[0].y)
-                    val p2 = Offset(currentPoints[1].x, currentPoints[1].y)
-
+                    val p1s = worldToScreen(currentPoints[0], pan, scale)
+                    val p2s = worldToScreen(currentPoints[1], pan, scale)
                     when (toolMode) {
                         ToolMode.SHAPE_RECT -> drawRect(
                             color = colorToUse,
-                            topLeft = Offset(minOf(p1.x, p2.x), minOf(p1.y, p2.y)),
-                            size = androidx.compose.ui.geometry.Size(
-                                width = abs(p2.x - p1.x),
-                                height = abs(p2.y - p1.y)
-                            ),
-                            style = Stroke(width = strokeWidth)
+                            topLeft = Offset(minOf(p1s.x, p2s.x), minOf(p1s.y, p2s.y)),
+                            size = androidx.compose.ui.geometry.Size(abs(p2s.x - p1s.x), abs(p2s.y - p1s.y)),
+                            style = Stroke(width = strokeWidth * scale)
                         )
-
                         ToolMode.SHAPE_LINE -> drawLine(
                             color = colorToUse,
-                            start = p1,
-                            end = p2,
-                            strokeWidth = strokeWidth,
+                            start = p1s, end = p2s,
+                            strokeWidth = strokeWidth * scale,
                             cap = StrokeCap.Round
                         )
-
                         ToolMode.SHAPE_CIRCLE -> {
-                            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
-                            val center = Offset((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+                            val radius = sqrt((p2s.x - p1s.x).pow(2) + (p2s.y - p1s.y).pow(2)) / 2f
+                            val center = Offset((p1s.x + p2s.x) / 2f, (p1s.y + p2s.y) / 2f)
                             drawCircle(
                                 color = colorToUse,
                                 radius = radius,
                                 center = center,
-                                style = Stroke(width = strokeWidth)
+                                style = Stroke(width = strokeWidth * scale)
                             )
                         }
-
                         else -> {}
                     }
                 }
+
 
             }
         }
@@ -846,6 +881,14 @@ fun WhiteboardScreen(
                         }, colors = ButtonDefaults.textButtonColors(
                             containerColor = if (toolMode == ToolMode.POINTER) Color.LightGray else Color.Transparent
                         )) { Text("Pointer") }
+
+                        TextButton(onClick = {
+                            whiteboardViewModel.setToolMode(ToolMode.FREE_ROAM, sessionId)
+                            showToolSelector = false
+                        }, colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (toolMode == ToolMode.FREE_ROAM) Color.LightGray else Color.Transparent
+                        )) { Text("Free roam") }
+
                     }
                 },
                 confirmButton = {
@@ -1095,70 +1138,189 @@ fun ColorPickerDialog(
     )
 }
 
-fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float): Boolean {
-    if (stroke.color == "#FFFFFF") return false
+fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): Float {
+    val worldTol = screenTolToWorld(scale)
+    val halfStroke = s.strokeWidth * 0.5f
+    val edgeTol = maxOf(worldTol, halfStroke)
+    val bboxMargin = maxOf(worldTol, s.strokeWidth)
 
+    val aabb = AabbExpand(strokeAabb(s), bboxMargin)
+    if (!inAabb(x, y, aabb)) return Float.POSITIVE_INFINITY
+
+    // Vrati minimalnu metriku udaljenosti po tipu (isti uvjeti kao u isTouchingStroke),
+    // ali BEZ praga, samo “koliko je daleko” (0..∞).
     return when {
-        stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
-            val textX = stroke.points[0].x
-            val textY = stroke.points[0].y
-            val fontSize = stroke.shapeType.substringAfter("font=")
-                .substringBefore(";")
-                .toFloatOrNull() ?: (stroke.strokeWidth * 6)
-            val tolerance = fontSize
-            abs(x - textX) < tolerance * 4 && abs(y - textY) < tolerance
+        s.shapeType?.startsWith("text:") == true && s.points.size == 1 -> {
+            // bbox distance do pravokutnika (0 kada je unutra)
+            val textX = s.points[0].x
+            val textY = s.points[0].y
+            val font = s.shapeType.substringAfter("font=").substringBefore(";").toFloatOrNull()
+                ?: (s.strokeWidth * 6f)
+            val textH = font
+            val textLen = (s.shapeType.substringAfter("text:").substringBefore(";").length).coerceAtLeast(1)
+            val textW = 0.6f * font * textLen
+            val halfW = textW * 0.5f
+            val halfH = textH * 0.5f
+            val dx = maxOf(0f, abs(x - textX) - halfW)
+            val dy = maxOf(0f, abs(y - textY) - halfH)
+            sqrt(dx*dx + dy*dy)
         }
-
-        stroke.shapeType == "circle" && stroke.points.size == 2 -> {
-            val p1 = stroke.points[0]
-            val p2 = stroke.points[1]
-            val centerX = (p1.x + p2.x) / 2
-            val centerY = (p1.y + p2.y) / 2
-            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2
-            val distance = sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
-            abs(distance - radius) < stroke.strokeWidth * 1.5f
+        s.shapeType == "circle" && s.points.size == 2 -> {
+            val p1 = s.points[0]; val p2 = s.points[1]
+            val cx = (p1.x + p2.x)/2f; val cy = (p1.y + p2.y)/2f
+            val r = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
+            abs(sqrt((x - cx).pow(2) + (y - cy).pow(2)) - r)
         }
-
-        stroke.shapeType == "rect" && stroke.points.size == 2 -> {
-            val left = minOf(stroke.points[0].x, stroke.points[1].x)
-            val right = maxOf(stroke.points[0].x, stroke.points[1].x)
-            val top = minOf(stroke.points[0].y, stroke.points[1].y)
-            val bottom = maxOf(stroke.points[0].y, stroke.points[1].y)
-            val border = stroke.strokeWidth * 1.5f
-
-            val isNearLeft = abs(x - left) < border && y in top..bottom
-            val isNearRight = abs(x - right) < border && y in top..bottom
-            val isNearTop = abs(y - top) < border && x in left..right
-            val isNearBottom = abs(y - bottom) < border && x in left..right
-
-            isNearLeft || isNearRight || isNearTop || isNearBottom
+        s.shapeType == "rect" && s.points.size == 2 -> {
+            val left = minOf(s.points[0].x, s.points[1].x)
+            val right = maxOf(s.points[0].x, s.points[1].x)
+            val top = minOf(s.points[0].y, s.points[1].y)
+            val bottom = maxOf(s.points[0].y, s.points[1].y)
+            // dist do rubova okvira (min od 4 ruba), 0 ako si na rubu; izvan “unutrašnjosti” vraća udaljenost do najbližeg ruba
+            val dxLeft = abs(x - left)
+            val dxRight = abs(x - right)
+            val dyTop = abs(y - top)
+            val dyBottom = abs(y - bottom)
+            val insideHoriz = x in left..right
+            val insideVert = y in top..bottom
+            when {
+                insideHoriz -> minOf(dyTop, dyBottom)
+                insideVert -> minOf(dxLeft, dxRight)
+                else -> {
+                    // do najbližeg kuta
+                    val cx = if (x < left) left else right
+                    val cy = if (y < top) top else bottom
+                    sqrt((x - cx)*(x - cx) + (y - cy)*(y - cy))
+                }
+            }
         }
-
-        stroke.shapeType == "line" && stroke.points.size == 2 -> {
-            val (x1, y1) = stroke.points[0]
-            val (x2, y2) = stroke.points[1]
-            val lineLength = sqrt((x2 - x1).pow(2) + (y2 - y1).pow(2))
-            if (lineLength == 0f) return false
-
-            val distance = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) / lineLength
-            val minX = minOf(x1, x2) - stroke.strokeWidth
-            val maxX = maxOf(x1, x2) + stroke.strokeWidth
-            val minY = minOf(y1, y2) - stroke.strokeWidth
-            val maxY = maxOf(y1, y2) + stroke.strokeWidth
-
-            distance < stroke.strokeWidth * 1.5f && x in minX..maxX && y in minY..maxY
+        s.shapeType == "line" && s.points.size == 2 -> {
+            val (x1, y1) = s.points[0]
+            val (x2, y2) = s.points[1]
+            pointToSegmentDistance(x, y, x1, y1, x2, y2)
         }
-
         else -> {
-            stroke.points.any {
-                val dx = it.x - x
-                val dy = it.y - y
-                sqrt(dx * dx + dy * dy) < stroke.strokeWidth * 2
+            val pts = s.points
+            if (pts.size == 1) {
+                val dx = pts[0].x - x; val dy = pts[0].y - y
+                sqrt(dx*dx + dy*dy)
+            } else {
+                var minDist = Float.POSITIVE_INFINITY
+                for (i in 0 until pts.size - 1) {
+                    val d = pointToSegmentDistance(x, y, pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
+                    if (d < minDist) minDist = d
+                }
+                minDist
             }
         }
     }
 }
 
+fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float, scale: Float): Boolean {
+    // Ako želiš da Remove Stroke pogađa i “white paint” tragove, ukloni ovu liniju:
+    if (stroke.color == "#FFFFFF") return false
+
+    val worldTol = screenTolToWorld(scale)
+    val halfStroke = stroke.strokeWidth * 0.5f
+    val edgeTol = maxOf(worldTol, halfStroke)
+    val bboxMargin = maxOf(worldTol, stroke.strokeWidth)
+
+    val aabb = AabbExpand(strokeAabb(stroke), bboxMargin)
+    if (!inAabb(x, y, aabb)) return false
+
+    return when {
+        stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
+            // Koristi worldTol za “unutra” proširenje
+            val textX = stroke.points[0].x
+            val textY = stroke.points[0].y
+            val fontSizeWorld = stroke.shapeType.substringAfter("font=").substringBefore(";").toFloatOrNull()
+                ?: (stroke.strokeWidth * 6f)
+            val textH = fontSizeWorld
+            val textLen = (stroke.shapeType.substringAfter("text:").substringBefore(";").length).coerceAtLeast(1)
+            val textW = 0.6f * fontSizeWorld * textLen
+            val halfW = textW * 0.5f
+            val halfH = textH * 0.5f
+            x in (textX - halfW - worldTol)..(textX + halfW + worldTol) &&
+                    y in (textY - halfH - worldTol)..(textY + halfH + worldTol)
+        }
+        stroke.shapeType == "circle" && stroke.points.size == 2 -> {
+            val p1 = stroke.points[0]; val p2 = stroke.points[1]
+            val centerX = (p1.x + p2.x) / 2f
+            val centerY = (p1.y + p2.y) / 2f
+            val radius = sqrt((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) / 2f
+            val distance = sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
+            abs(distance - radius) < edgeTol
+        }
+        stroke.shapeType == "rect" && stroke.points.size == 2 -> {
+            val left = minOf(stroke.points[0].x, stroke.points[1].x)
+            val right = maxOf(stroke.points[0].x, stroke.points[1].x)
+            val top = minOf(stroke.points[0].y, stroke.points[1].y)
+            val bottom = maxOf(stroke.points[0].y, stroke.points[1].y)
+            val border = edgeTol
+            val isNearLeft = abs(x - left) < border && y in top..bottom
+            val isNearRight = abs(x - right) < border && y in top..bottom
+            val isNearTop = abs(y - top) < border && x in left..right
+            val isNearBottom = abs(y - bottom) < border && x in left..right
+            isNearLeft || isNearRight || isNearTop || isNearBottom
+        }
+        stroke.shapeType == "line" && stroke.points.size == 2 -> {
+            val (x1, y1) = stroke.points[0]
+            val (x2, y2) = stroke.points[1]
+            val distance = pointToSegmentDistance(x, y, x1, y1, x2, y2)
+            // BBox s istim marginom kao i distance prag
+            val margin = edgeTol
+            val minX = minOf(x1, x2) - margin
+            val maxX = maxOf(x1, x2) + margin
+            val minY = minOf(y1, y2) - margin
+            val maxY = maxOf(y1, y2) + margin
+            x in minX..maxX && y in minY..maxY && distance < edgeTol
+        }
+        else -> {
+            val pts = stroke.points
+            if (pts.size == 1) {
+                val dx = pts[0].x - x
+                val dy = pts[0].y - y
+                sqrt(dx*dx + dy*dy) < edgeTol
+            } else {
+                var minDist = Float.POSITIVE_INFINITY
+                for (i in 0 until pts.size - 1) {
+                    val d = pointToSegmentDistance(x, y, pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
+                    if (d < minDist) minDist = d
+                }
+                minDist < edgeTol
+            }
+        }
+    }
+}
+
+
+private fun pointToSegmentDistance(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+    val dx = x2 - x1
+    val dy = y2 - y1
+    if (dx == 0f && dy == 0f) {
+        val dxp = px - x1
+        val dyp = py - y1
+        return sqrt(dxp*dxp + dyp*dyp)
+    }
+    val t = ((px - x1)*dx + (py - y1)*dy) / (dx*dx + dy*dy)
+    val clamped = t.coerceIn(0f, 1f)
+    val projX = x1 + clamped*dx
+    val projY = y1 + clamped*dy
+    val ddx = px - projX
+    val ddy = py - projY
+    return sqrt(ddx*ddx + ddy*ddy)
+}
+
+private fun strokeAabb(s: DrawingStroke): Aabb {
+    val xs = s.points.map { it.x }
+    val ys = s.points.map { it.y }
+    return Aabb(xs.minOrNull() ?: 0f, ys.minOrNull() ?: 0f, xs.maxOrNull() ?: 0f, ys.maxOrNull() ?: 0f)
+}
+
+private fun AabbExpand(a: Aabb, m: Float) = Aabb(a.minX - m, a.minY - m, a.maxX + m, a.maxY + m)
+
+private fun inAabb(x: Float, y: Float, a: Aabb) =
+    x >= a.minX && x <= a.maxX && y >= a.minY && y <= a.maxY
 
 
 
