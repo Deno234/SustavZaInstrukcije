@@ -9,11 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -23,6 +27,7 @@ import com.example.sustavzainstrukcije.ui.utils.RoleSelector
 import com.example.sustavzainstrukcije.ui.utils.SubjectsInput
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 
 @Composable
 fun GoogleRegistrationScreen(
@@ -35,68 +40,93 @@ fun GoogleRegistrationScreen(
     val allSubjects = listOf("Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Literature", "History", "Geography")
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Create Account",
-            style = MaterialTheme.typography.headlineMedium
-        )
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    fun notify(msg: String) { scope.launch { snackbarHostState.showSnackbar(msg) } }
 
-        RoleSelector(
-            selectedRole = role,
-            onRoleSelected = { role = it }
-        )
 
-        if (role == "instructor") {
-            SubjectsInput(
-                subjects = subjects,
-                availableSubjects = allSubjects,
-                onSubjectAdded = { newSubject ->
-                    subjects = subjects + newSubject
-                },
-                onSubjectRemoved = { subjectToRemove ->
-                    subjects = subjects.filter { it != subjectToRemove }
-                }
-            )
-
-            AvailableHoursInput(
-                availableHours = availableTime,
-                onHoursUpdated = { availableTime = it }
-            )
-        }
-
-        errorMessage?.let {
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+    ) { padding ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp)
+                text = "Create Account",
+                style = MaterialTheme.typography.headlineMedium
             )
-        }
 
-        Button(
-            onClick = {
-                if (validateForm(role, subjects, availableTime)) {
+            RoleSelector(
+                selectedRole = role,
+                onRoleSelected = { role = it }
+            )
+
+            if (role == "instructor") {
+                SubjectsInput(
+                    subjects = subjects,
+                    availableSubjects = allSubjects,
+                    onSubjectAdded = { newSubject ->
+                        subjects = subjects + newSubject
+                    },
+                    onSubjectRemoved = { subjectToRemove ->
+                        subjects = subjects.filter { it != subjectToRemove }
+                    }
+                )
+
+                AvailableHoursInput(
+                    availableHours = availableTime,
+                    onHoursUpdated = { availableTime = it },
+                    onNotify = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                )
+            }
+
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            Button(
+                onClick = {
+                    val valid = validateForm(role, subjects, availableTime)
+                    if (!valid) {
+                        when {
+                            role == "instructor" && subjects.isEmpty() -> notify("Choose at least one subject")
+                            role == "instructor" && availableTime.isEmpty() -> notify("Add at least one available time")
+                            else -> notify("Please complete all required fields.")
+                        }
+                        return@Button
+                    }
+
+
                     saveUserData(
                         role = role,
                         subjects = subjects,
                         availableHours = availableTime,
-                        onSuccess = onRegistrationComplete,
-                        onFailure = { errorMessage = it }
+                        onSuccess = {
+                            notify("Registration successful")
+                            onRegistrationComplete()
+                        },
+                        onFailure = { raw ->
+                            val msg = raw.ifBlank { "Registration failed" }
+                            notify(msg)
+                        }
                     )
-                } else {
-                    errorMessage = "Please complete all required fields."
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Register")
-        }
 
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Register")
+            }
+
+        }
     }
+
 }
 
 private fun saveUserData(

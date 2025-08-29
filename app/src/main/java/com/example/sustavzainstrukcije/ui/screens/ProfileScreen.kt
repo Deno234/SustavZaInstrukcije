@@ -113,7 +113,8 @@ fun ProfileScreen(
                 availableHours = availableHours,
                 onHoursUpdated = { updatedHours ->
                     availableHours = updatedHours
-                }
+                },
+                onNotify = TODO()
             )
 
             Spacer(modifier = Modifier.height(16.dp))

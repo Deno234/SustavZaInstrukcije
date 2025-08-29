@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.example.sustavzainstrukcije.ui.data.User
 import java.util.Locale
 import androidx.compose.material3.TimePicker
+import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -241,6 +242,7 @@ fun DaySelector(
 fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
     onHoursUpdated: (Map<String, List<String>>) -> Unit,
+    onNotify: (String) -> Unit
 ) {
     var showAddHoursDialog by remember { mutableStateOf(false) }
     var showViewHoursDialog by remember { mutableStateOf(false) }
@@ -352,22 +354,36 @@ fun AvailableHoursInput(
             confirmButton = {
                 Button(onClick = {
                     if (selectedDay.isNotBlank() && startTime.isNotBlank() && endTime.isNotBlank()) {
+
+                        if (!isValidRange(startTime, endTime)) {
+                            onNotify("Start hour starts after end hour")
+                            return@Button
+                        }
+
+                        val currentSlots = availableHours[selectedDay] ?: emptyList()
+                        if (overlapsAny(currentSlots, startTime, endTime)) {
+                            onNotify("Time slot overlaps with existing slots")
+                            return@Button
+                        }
+
                         val timeSlot = "$startTime - $endTime"
-                        val updatedAvailableHours =
-                            availableHours.toMutableMap()
-                        val currentSlots =
-                            updatedAvailableHours[selectedDay] ?: emptyList()
-                        val newSlots =
-                            (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
-                        updatedAvailableHours[selectedDay] =
-                            newSlots
-                        onHoursUpdated(updatedAvailableHours)
+                        val updated = availableHours.toMutableMap()
+                        val newSlots = (currentSlots + timeSlot)
+                            .sortedBy { parseTimeHHmm(it.substringBefore(" - ")) }
+                        updated[selectedDay] = newSlots
+                        onHoursUpdated(updated)
+
                         showAddHoursDialog = false
+                        selectedDay = ""
+                        startTime = ""
+                        endTime = ""
+
+                        onNotify("Time slot added")
                     }
-                }) {
-                    Text("Add")
-                }
-            },
+                }) { Text("Add") }
+            }
+
+            ,
             dismissButton = {
                 TextButton(onClick = {
                     showAddHoursDialog = false
@@ -558,5 +574,31 @@ fun SubjectDropdown(
                 )
             }
         }
+    }
+}
+
+private fun parseTimeHHmm(t: String): LocalTime =
+    LocalTime.parse(t) // očekuje "HH:mm" format, npr. "08:45"
+
+private fun isValidRange(start: String, end: String): Boolean {
+    val s = parseTimeHHmm(start)
+    val e = parseTimeHHmm(end)
+    return s < e
+}
+
+private fun overlapsAny(
+    daySlots: List<String>,
+    newStartStr: String,
+    newEndStr: String
+): Boolean {
+    val newStart = parseTimeHHmm(newStartStr)
+    val newEnd = parseTimeHHmm(newEndStr)
+
+    return daySlots.any { slot ->
+        val sStr = slot.substringBefore(" - ")
+        val eStr = slot.substringAfter(" - ")
+        val s = parseTimeHHmm(sStr)
+        val e = parseTimeHHmm(eStr)
+        (newStart < e) && (newEnd > s)
     }
 }
