@@ -100,16 +100,22 @@ fun SubjectsInput(
     subjects: List<String>,
     availableSubjects: List<String>,
     onSubjectAdded: (String) -> Unit,
-    onSubjectRemoved: (String) -> Unit
+    onSubjectRemoved: (String) -> Unit,
+    onAddNewSubject: (String) -> Unit,
+    onNotify: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     var selectedSubject by remember { mutableStateOf("") }
+    var newSubject by remember { mutableStateOf("") }
 
-    val filteredAvailableSubjects = availableSubjects.filter { it !in subjects }.sorted()
+    val filteredAvailableSubjects = availableSubjects
+        .filter { it !in subjects }
+        .sorted()
 
     Column {
         Text("Subjects you teach:", style = MaterialTheme.typography.labelMedium)
 
+        // postojeći čipovi...
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
@@ -130,11 +136,8 @@ fun SubjectsInput(
             }
         }
 
-
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
+        // Dropdown za postojeće predmete
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
             OutlinedTextField(
                 value = selectedSubject,
                 onValueChange = {},
@@ -145,11 +148,7 @@ fun SubjectsInput(
                     .fillMaxWidth()
                     .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
             )
-
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 filteredAvailableSubjects.forEach { subject ->
                     DropdownMenuItem(
                         text = { Text(subject) },
@@ -162,8 +161,37 @@ fun SubjectsInput(
                 }
             }
         }
+
+        // Unos novog predmeta
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = newSubject,
+            onValueChange = { newSubject = it },
+            label = { Text("Add new subject") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Button(onClick = {
+            val candidate = newSubject.trim()
+            if (candidate.isEmpty()) {
+                onNotify("Subject cannot be empty")
+                return@Button
+            }
+            val existsInGlobal = availableSubjects.any { it.equals(candidate, ignoreCase = true) }
+            val existsInLocal = subjects.any { it.equals(candidate, ignoreCase = true) }
+            if (existsInGlobal || existsInLocal) {
+                onNotify("Subject already exists")
+                return@Button
+            }
+            onAddNewSubject(candidate) // roditelj -> VM -> Firestore
+            onSubjectAdded(candidate)  // odmah prikaži u UI
+            newSubject = ""
+            onNotify("Subject added")
+        }) {
+            Text("Add")
+        }
     }
 }
+
 
 @Composable
 fun SubjectSelector(

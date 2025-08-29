@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,7 @@ import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.utils.AvailableHoursInput
 import com.example.sustavzainstrukcije.ui.utils.RoleSelector
 import com.example.sustavzainstrukcije.ui.utils.SubjectsInput
+import com.example.sustavzainstrukcije.ui.viewmodels.SubjectsViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
@@ -43,7 +45,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun RegisterScreen(
     onRegistrationComplete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subjectsViewModel: SubjectsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
@@ -59,6 +62,8 @@ fun RegisterScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    val subjectsFromDb by subjectsViewModel.subjects.collectAsState()
 
     fun notify(msg: String) {
         scope.launch { snackbarHostState.showSnackbar(message = msg) }
@@ -122,13 +127,15 @@ fun RegisterScreen(
             if (role == "instructor") {
                 SubjectsInput(
                     subjects = subjects,
-                    availableSubjects = allSubjects,
-                    onSubjectAdded = { newSubject ->
-                        subjects = subjects + newSubject
+                    availableSubjects = subjectsFromDb,
+                    onSubjectAdded = { s -> subjects = subjects + s },
+                    onSubjectRemoved = { s -> subjects = subjects - s },
+                    onAddNewSubject = { candidate ->
+                        scope.launch {
+                            val added = subjectsViewModel.addSubjectIfMissing(candidate)
+                        }
                     },
-                    onSubjectRemoved = { subjectToRemove ->
-                        subjects = subjects.filter { it != subjectToRemove }
-                    }
+                    onNotify = ::notify
                 )
 
                 AvailableHoursInput(
@@ -163,7 +170,7 @@ fun RegisterScreen(
 
                     registerUser(
                         name = name,
-                        email = email,
+                        email = email.trim(),
                         password = password,
                         role = role,
                         subjects = subjects,
