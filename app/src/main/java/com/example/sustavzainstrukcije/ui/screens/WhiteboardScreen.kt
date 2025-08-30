@@ -46,6 +46,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +85,8 @@ import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Hit
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.ToolMode
+import com.example.sustavzainstrukcije.ui.utils.isNowWithinAnyInterval
+import com.example.sustavzainstrukcije.ui.utils.millisUntilEndOfCurrentInterval
 import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import com.google.firebase.Firebase
@@ -90,6 +94,8 @@ import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -169,6 +175,18 @@ fun WhiteboardScreen(
     val minScale = 0.25f
     val maxScale = 5f
 
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var withinWorkingHours by remember { mutableStateOf(true) }
+    var showOvertimeDialog by remember { mutableStateOf(false) }
+
+    suspend fun loadInstructorHours(): Map<String, List<String>> {
+        val instrId = currentSession?.instructorId ?: return emptyMap()
+        val snap = Firebase.firestore.collection("users").document(instrId).get().await()
+        @Suppress("UNCHECKED_CAST")
+        return snap.get("availableHours") as? Map<String, List<String>> ?: emptyMap()
+    }
+
     fun worldToScreen(p: Point, pan: Offset, scale: Float) =
         Offset((p.x - pan.x) * scale, (p.y - pan.y) * scale)
 
@@ -186,6 +204,42 @@ fun WhiteboardScreen(
             pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
         }
         pan -= offsetChange / scale
+    }
+
+    LaunchedEffect(currentSession?.instructorId) {
+        val hours = loadInstructorHours()
+        withinWorkingHours = isNowWithinAnyInterval(hours) // inicijalno
+
+        // zakazati popup na kraju trenutnog intervala ako smo unutar
+        fun scheduleEndPopup() {
+            val ms = millisUntilEndOfCurrentInterval(hours)
+            if (ms != null && ms > 0L) {
+                scope.launch {
+                    kotlinx.coroutines.delay(ms)
+                    // ponovno provjeri (ako je sada izvan)
+                    val nowOk = isNowWithinAnyInterval(hours)
+                    if (!nowOk) {
+                        withinWorkingHours = false
+                        showOvertimeDialog = true
+                    }
+                }
+            }
+        }
+        if (withinWorkingHours) scheduleEndPopup()
+
+        // safety net: periodična provjera svakih 60 s
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60_000)
+                val nowOk = isNowWithinAnyInterval(hours)
+                if (nowOk != withinWorkingHours) {
+                    withinWorkingHours = nowOk
+                    if (!nowOk) {
+                        showOvertimeDialog = true
+                    }
+                }
+            }
+        }
     }
 
 
@@ -279,8 +333,28 @@ fun WhiteboardScreen(
                 IconButton(onClick = { showDeleteDialog = true }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete page")
                 }
+                IconButton(onClick = { /* optional details dialog */ }) {
+                    val color = if (withinWorkingHours) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                    )
+                }
             }
         )
+
+        if (showOvertimeDialog) {
+            AlertDialog(
+                onDismissRequest = { /* require explicit close */ },
+                title = { Text("Working hours exceeded") },
+                text = { Text("You are now outside your defined working hours.") },
+                confirmButton = {
+                    TextButton(onClick = { showOvertimeDialog = false }) { Text("Close") }
+                }
+            )
+        }
 
         // Navigacija kroz stranice
         Row(

@@ -51,33 +51,49 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "Message received from: ${remoteMessage.from}")
         Log.d(TAG, "Message data: ${remoteMessage.data}")
 
-        remoteMessage.data.isNotEmpty().let {
-            val title = remoteMessage.data["title"] ?: "Nova poruka"
-            val body = remoteMessage.data["body"] ?: ""
-            val chatId = remoteMessage.data["chatId"]
-            val otherUserId = remoteMessage.data["otherUserId"]
-            val senderName = remoteMessage.data["senderName"] ?: "Netko"
+        if (remoteMessage.data.isNotEmpty()) {
+            val type = remoteMessage.data["type"]
 
-            Log.d(TAG, "Extracted data - chatId: $chatId, otherUserId: $otherUserId")
-            Log.d(TAG, "Current active chat: $currentActiveChatId")
+            when (type) {
+                "session_invitation" -> {
+                    val title = remoteMessage.notification?.title
+                        ?: remoteMessage.data["title"]
+                        ?: "Pozivnica"
+                    val body = remoteMessage.notification?.body
+                        ?: remoteMessage.data["body"]
+                        ?: "Imate novu pozivnicu"
+                    val sessionId = remoteMessage.data["sessionId"]
+                    val instructorId = remoteMessage.data["instructorId"]
+                    val subject = remoteMessage.data["subject"]
 
-            if (currentActiveChatId == chatId) {
-                Log.d(TAG, "User is currently in this chat, not showing notification")
-                return@let
-            }
-
-            if (otherUserId != null) {
-                val userMessages = messageCache.getOrPut(otherUserId) { mutableListOf() }
-                userMessages.add(body)
-
-                if (userMessages.size > 5) {
-                    userMessages.removeAt(0)
+                    sendInvitationNotification(title, body, sessionId, instructorId, subject)
                 }
 
-                sendGroupedNotification(senderName, userMessages, chatId, otherUserId)
+                else -> {
+                    // postojeća logika za chat
+                    val title = remoteMessage.data["title"] ?: "Nova poruka"
+                    val body = remoteMessage.data["body"] ?: ""
+                    val chatId = remoteMessage.data["chatId"]
+                    val otherUserId = remoteMessage.data["otherUserId"]
+                    val senderName = remoteMessage.data["senderName"] ?: "Netko"
+
+                    if (currentActiveChatId == chatId) {
+                        Log.d(TAG, "User is currently in this chat, not showing notification")
+                        return
+                    }
+
+                    if (otherUserId != null) {
+                        val userMessages = messageCache.getOrPut(otherUserId) { mutableListOf() }
+                        userMessages.add(body)
+                        if (userMessages.size > 5) userMessages.removeAt(0)
+
+                        sendGroupedNotification(senderName, userMessages, chatId, otherUserId)
+                    }
+                }
             }
         }
     }
+
 
     private fun sendGroupedNotification(
         senderName: String,
@@ -206,6 +222,55 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "Notification sent with ID: $notificationId, Group: $groupKey")
     }
+
+    private fun sendInvitationNotification(
+        title: String,
+        body: String,
+        sessionId: String?,
+        instructorId: String?,
+        subject: String?
+    ) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = "NOTIFICATION_INVITATION_${System.currentTimeMillis()}"
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra("navigateTo", "StudentInvitations")
+            putExtra("sessionId", sessionId)
+            putExtra("instructorId", instructorId)
+            putExtra("subject", subject)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            (sessionId ?: System.currentTimeMillis().toString()).hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val channelId = "session_invitation_channel"
+        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+        val notificationBuilder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setSound(defaultSoundUri)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        val notificationManager =
+            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val channel = NotificationChannel(
+            channelId,
+            "Pozivnice",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        notificationManager.createNotificationChannel(channel)
+
+        notificationManager.notify((sessionId ?: System.currentTimeMillis().toString()).hashCode(), notificationBuilder.build())
+    }
+
 
 
 }

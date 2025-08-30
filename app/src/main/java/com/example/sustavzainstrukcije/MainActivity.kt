@@ -198,6 +198,14 @@ class MainActivity : ComponentActivity() {
             } else {
                 Log.w("MainActivity", "NavController not initialized")
             }
+        } else if (navigateTo == "StudentInvitations") {
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(500)
+                appNavController.navigate("student_sessions?openInvitations=true") {
+                    launchSingleTop = true
+                }
+            }
+            intent.removeExtra("navigateTo")
         } else {
             Log.d("MainActivity", "No ChatScreen navigation requested. NavigateTo: '$navigateTo', ChatId: '$chatId', OtherUserId: '$otherUserId'")
         }

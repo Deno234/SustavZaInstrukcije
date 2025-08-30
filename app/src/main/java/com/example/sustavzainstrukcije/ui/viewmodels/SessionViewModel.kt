@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.sustavzainstrukcije.ui.data.InstructionSession
 import com.example.sustavzainstrukcije.ui.data.SessionInvitation
+import com.example.sustavzainstrukcije.ui.utils.isNowWithinAnyInterval
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.database.DataSnapshot
@@ -16,6 +17,7 @@ import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class SessionViewModel : ViewModel() {
@@ -305,6 +307,13 @@ class SessionViewModel : ViewModel() {
             .addOnSuccessListener {
                 onComplete()
             }
+    }
+
+    suspend fun checkInstructorIsWithinWorkingHours(): Boolean {
+        val userId = auth.currentUser?.uid ?: return false
+        val snap = Firebase.firestore.collection("users").document(userId).get().await()
+        val hours = snap.get("availableHours") as? Map<String, List<String>> ?: emptyMap()
+        return isNowWithinAnyInterval(hours)
     }
 
 
