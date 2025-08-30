@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,11 +28,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -162,8 +167,8 @@ fun StudentSessionsScreen(
 fun InvitationCard(
     invitation: SessionInvitation,
     onAccept: () -> Unit,
-    onDecline: () -> Unit
-) {
+    onDecline: () -> Unit)
+{
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -239,8 +244,11 @@ fun StudentSessionCard(
     lastVisited: Long?,
     isInstructorOnline: Boolean,
     instructorName: String,
-    onJoinClick: () -> Unit
+    onJoinClick: () -> Unit,
+    sessionViewModel: SessionViewModel = viewModel()
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -257,10 +265,24 @@ fun StudentSessionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Subject: ${session.subject}",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row (
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ){
+                    Text(
+                        text = "Subject: ${session.subject}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    OutlinedButton(
+                        onClick = { showDeleteDialog = true },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Delete")
+                    }
+                }
 
                 Badge(
                     containerColor = MaterialTheme.colorScheme.primary
@@ -309,6 +331,28 @@ fun StudentSessionCard(
                     "Enter Session"
                 )
             }
+
+            if (showDeleteDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Delete Session") },
+                    text = { Text("Are you sure you want to remove this session from your list? This action will not delete it for other users.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            sessionViewModel.hideSessionForCurrentUser(session.id)
+                            showDeleteDialog = false
+                        }) {
+                            Text("Yes, Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
         }
     }
 }

@@ -15,12 +15,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +60,7 @@ fun InstructorSessionsScreen(
     val scope = rememberCoroutineScope()
     var pendingRoute by remember { mutableStateOf<String?>(null) }
     var showConfirmOutsideHours by remember { mutableStateOf(false) }
+
 
     LaunchedEffect(Unit) {
         sessionViewModel.getInstructorSessions()
@@ -183,7 +186,8 @@ fun SessionCard(
     userNames: Map<String, String>,
     lastVisited: Long?,
     onJoinClick: () -> Unit,
-    onContinueClick: () -> Unit
+    onContinueClick: () -> Unit,
+    sessionViewModel: SessionViewModel = viewModel()
 ) {
 
     val invitedNames = listOfNotNull(
@@ -191,6 +195,8 @@ fun SessionCard(
     ) + session.studentIds.mapNotNull { userNames[it] }
 
     val invitedNamesText = invitedNames.joinToString(", ")
+
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
 
     Card(
@@ -202,10 +208,25 @@ fun SessionCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "Subject: ${session.subject}",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Subject: ${session.subject}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                OutlinedButton(
+                    onClick = { showDeleteDialog = true },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            }
 
             Text(
                 text = "Users in session: $onlineCount",
@@ -247,6 +268,28 @@ fun SessionCard(
                     }
                 }
             }
+
+            if (showDeleteDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Delete Session") },
+                    text = { Text("Are you sure you want to remove this session from your list? This action will not delete it for other users.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            sessionViewModel.hideSessionForCurrentUser(session.id)
+                            showDeleteDialog = false
+                        }) {
+                            Text("Yes, Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
 
         }
     }
