@@ -1,5 +1,7 @@
 package com.example.sustavzainstrukcije.ui.utils
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,15 +12,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -52,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import com.example.sustavzainstrukcije.ui.data.User
 import java.util.Locale
 import androidx.compose.material3.TimePicker
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -115,7 +123,6 @@ fun SubjectsInput(
     Column {
         Text("Subjects you teach:", style = MaterialTheme.typography.labelMedium)
 
-        // postojeći čipovi...
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
@@ -136,7 +143,6 @@ fun SubjectsInput(
             }
         }
 
-        // Dropdown za postojeće predmete
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
             OutlinedTextField(
                 value = selectedSubject,
@@ -162,7 +168,6 @@ fun SubjectsInput(
             }
         }
 
-        // Unos novog predmeta
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = newSubject,
@@ -182,8 +187,8 @@ fun SubjectsInput(
                 onNotify("Subject already exists")
                 return@Button
             }
-            onAddNewSubject(candidate) // roditelj -> VM -> Firestore
-            onSubjectAdded(candidate)  // odmah prikaži u UI
+            onAddNewSubject(candidate)
+            onSubjectAdded(candidate)
             newSubject = ""
             onNotify("Subject added")
         }) {
@@ -494,11 +499,88 @@ private fun TimePickerDialog(
 }
 
 @Composable
+fun InstructorHorizontalCard(
+    instructor: User,
+    modifier: Modifier = Modifier,
+    avgRating: Double = 0.0,
+    ratingCount: Int = 0,
+    onCheckProfile: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .width(200.dp)
+            .clickable { onCheckProfile() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                val initial = instructor.name.firstOrNull()?.uppercase() ?: ""
+                if (initial.isNotBlank()) {
+                    Text(
+                        text = initial,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Avatar",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Text(
+                text = instructor.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+
+            if (!instructor.subjects.isNullOrEmpty()) {
+                Text(
+                    text = instructor.subjects.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                RatingBar(rating = avgRating.toFloat())
+                Text(
+                    text = "(${ratingCount})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun InstructorsHorizontalRow(
     title: String,
     instructors: List<User>,
     modifier: Modifier = Modifier,
-    onCheckProfile: (intructorId: String) -> Unit
+    onCheckProfile: (instructorId: String) -> Unit,
+    cardContent: @Composable (User) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -512,55 +594,8 @@ fun InstructorsHorizontalRow(
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            /**
-             * Zašto je dobro koristiti items:
-             * items - works within LazyRow/LazyColumn
-             * More efficient for large lists
-             * Lazy - only renders visible items
-             * Efficient -> only updates changed items
-             */
             items(instructors) { instructor ->
-                InstructorHorizontalCard(
-                    instructor = instructor,
-                    onCheckProfile = { onCheckProfile(instructor.id) })
-            }
-        }
-    }
-}
-
-@Composable
-fun InstructorHorizontalCard(
-    instructor: User,
-    onCheckProfile: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(280.dp)
-            .padding(top = 8.dp)
-            .padding(end = 8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth()
-        ) {
-            Text(
-                text = instructor.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Teaches: ${instructor.subjects.sorted().joinToString(", ")}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = onCheckProfile,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            ) {
-                Text("Check Profile")
+                cardContent(instructor)
             }
         }
     }
@@ -630,3 +665,28 @@ private fun overlapsAny(
         (newStart < e) && (newEnd > s)
     }
 }
+
+@Composable
+fun RatingBar(
+    rating: Float,
+    maxRating: Int = 5,
+    modifier: Modifier = Modifier,
+    onRatingSelected: ((Int) -> Unit)? = null
+) {
+    Row(modifier = modifier) {
+        for (i in 1..maxRating) {
+            val filled = i <= rating
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = "Star $i",
+                tint = if (filled) Color(0xFFFFD700) else Color.Gray,
+                modifier = if (onRatingSelected != null) {
+                    Modifier.clickable { onRatingSelected(i) }
+                } else {
+                    Modifier
+                }
+            )
+        }
+    }
+}
+

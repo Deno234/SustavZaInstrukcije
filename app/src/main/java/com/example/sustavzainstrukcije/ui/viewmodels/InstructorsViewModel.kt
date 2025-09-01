@@ -22,6 +22,10 @@ class InstructorsViewModel (
 
     private var snapshotListener: ListenerRegistration? = null
 
+    private val _ratingsByInstructorAndSubject =
+        MutableStateFlow<Map<Pair<String, String>, Pair<Double, Int>>>(emptyMap())
+    val ratingsByInstructorAndSubject = _ratingsByInstructorAndSubject.asStateFlow()
+
     val loadingState: StateFlow<Boolean> = _loadingState.asStateFlow()
     val subjects: StateFlow<List<String>> = _subjects.asStateFlow()
     val filteredInstructors: StateFlow<Map<String, List<User>>> = _filteredInstructors.asStateFlow()
@@ -99,9 +103,68 @@ class InstructorsViewModel (
             }
     }
 
+    fun addOrUpdateRating(
+        instructorId: String,
+        studentId: String,
+        subject: String,
+        rating: Int,
+        comment: String
+    ) {
+        val docId = "${studentId}_${instructorId}_$subject"
+        val data = mapOf(
+            "instructorId" to instructorId,
+            "studentId" to studentId,
+            "subject" to subject,
+            "rating" to rating,
+            "comment" to comment
+        )
+        firestore.collection("ratings").document(docId).set(data)
+    }
+
+
+    fun listenToInstructorRatingsForSubject(instructorId: String, subject: String) {
+        firestore.collection("ratings")
+            .whereEqualTo("instructorId", instructorId)
+            .whereEqualTo("subject", subject)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                snapshot?.let {
+                    val ratings = it.documents.mapNotNull { d -> d.getLong("rating")?.toInt() }
+                    val avg = if (ratings.isNotEmpty()) ratings.average() else 0.0
+                    val key = instructorId to subject
+                    _ratingsByInstructorAndSubject.value += (key to (avg to ratings.size))
+                }
+            }
+    }
+
     override fun onCleared() {
         super.onCleared()
         snapshotListener?.remove()
     }
+
+    fun listenToAllInstructorRatingsForSubject(subject: String) {
+        firestore.collection("ratings")
+            .whereEqualTo("subject", subject)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+
+                val ratingsGrouped = snapshot?.documents
+                    ?.mapNotNull { doc ->
+                        val instructorId = doc.getString("instructorId") ?: return@mapNotNull null
+                        val rating = doc.getLong("rating")?.toInt() ?: return@mapNotNull null
+                        instructorId to rating
+                    }
+                    ?.groupBy { it.first }
+                    ?.mapValues { (_, ratings) ->
+                        val values = ratings.map { it.second }
+                        values.average() to values.size
+                    }
+                    ?: emptyMap()
+
+                val newMap = ratingsGrouped.mapKeys { (instructorId, _) -> instructorId to subject }
+                _ratingsByInstructorAndSubject.value += newMap
+            }
+    }
+
 
 }
