@@ -33,13 +33,17 @@ fun FindInstructorsScreen(
     var selectedSubject by remember { mutableStateOf<String?>(null) }
     var sortByRating by remember { mutableStateOf(false) }
 
+    val ratingsOverall by instructorsViewModel.ratingsByInstructor.collectAsState()
+
     LaunchedEffect(searchQuery, selectedSubject) {
         instructorsViewModel.filterInstructors(searchQuery, selectedSubject)
     }
 
     LaunchedEffect(selectedSubject) {
-        selectedSubject?.let { subject ->
-            instructorsViewModel.listenToAllInstructorRatingsForSubject(subject)
+        if (selectedSubject == null) {
+            instructorsViewModel.listenToAllInstructorRatings()
+        } else {
+            instructorsViewModel.listenToAllInstructorRatingsForSubject(selectedSubject!!)
         }
     }
 
@@ -140,16 +144,18 @@ fun FindInstructorsScreen(
                                         navController.navigate("checkProfile/$instructorId")
                                     },
                                     cardContent = { instructor: User ->
-                                        val key = instructor.id to subject
-                                        val (avg, count) = ratingsMap[key] ?: (0.0 to 0)
+                                        val (avg, count) = if (selectedSubject != null) {
+                                            ratingsMap[instructor.id to subject] ?: (0.0 to 0)
+                                        } else {
+                                            ratingsOverall[instructor.id] ?: (0.0 to 0)
+                                        }
                                         InstructorHorizontalCard(
                                             instructor = instructor,
                                             avgRating = avg,
                                             ratingCount = count,
-                                            onCheckProfile = {
-                                                navController.navigate("checkProfile/${instructor.id}")
-                                            }
+                                            onCheckProfile = { navController.navigate("checkProfile/${instructor.id}") }
                                         )
+
                                     }
                                 )
                             }

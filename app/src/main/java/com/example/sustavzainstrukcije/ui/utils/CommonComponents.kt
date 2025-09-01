@@ -60,6 +60,7 @@ import java.util.Locale
 import androidx.compose.material3.TimePicker
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -671,6 +672,7 @@ fun RatingBar(
     rating: Float,
     maxRating: Int = 5,
     modifier: Modifier = Modifier,
+    starSize: Dp = 25.dp,
     onRatingSelected: ((Int) -> Unit)? = null
 ) {
     Row(modifier = modifier) {
@@ -680,13 +682,18 @@ fun RatingBar(
                 imageVector = Icons.Default.Star,
                 contentDescription = "Star $i",
                 tint = if (filled) Color(0xFFFFD700) else Color.Gray,
-                modifier = if (onRatingSelected != null) {
-                    Modifier.clickable { onRatingSelected(i) }
-                } else {
-                    Modifier
-                }
+                modifier = Modifier
+                    .size(starSize)
+                    .then(
+                        if (onRatingSelected != null) {
+                            Modifier.clickable { onRatingSelected(i) }
+                        } else {
+                            Modifier
+                        }
+                    )
             )
         }
     }
 }
+
 
