@@ -1,9 +1,11 @@
 package com.example.sustavzainstrukcije.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
@@ -12,10 +14,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.sustavzainstrukcije.ui.utils.*
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.InstructorsViewModel
@@ -29,12 +34,9 @@ fun CheckProfileScreen(
     authViewModel: AuthViewModel = viewModel()
 ) {
     val instructor by instructorsViewModel.checkedInstructor.collectAsState()
-    val ratingsMap by instructorsViewModel.ratingsByInstructorAndSubject.collectAsState()
 
-    var selectedSubject by remember { mutableStateOf<String?>(null) }
-    var rating by remember { mutableStateOf(0) }
-    var comment by remember { mutableStateOf("") }
     var showHoursDialog by remember { mutableStateOf(false) }
+    var showImageDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(instructorId) {
         instructorsViewModel.fetchCheckedInstructor(instructorId)
@@ -79,23 +81,36 @@ fun CheckProfileScreen(
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            val initial = instructor?.name?.firstOrNull()?.uppercase() ?: "?"
-                            if (initial.isNotBlank()) {
-                                Text(
-                                    text = initial,
-                                    style = MaterialTheme.typography.headlineMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                            if (!instructor?.profilePictureUrl.isNullOrEmpty()) {
+                                AsyncImage(
+                                    model = instructor?.profilePictureUrl,
+                                    contentDescription = "Profile picture",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .clickable { showImageDialog = true },
+                                    contentScale = ContentScale.Crop
                                 )
                             } else {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "Avatar",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                val initial = instructor?.name?.firstOrNull()?.uppercase() ?: "?"
+                                if (initial.isNotBlank()) {
+                                    Text(
+                                        text = initial,
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = "Avatar",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
+
 
                         Text(
                             instructor?.name ?: "Loading...",
@@ -191,5 +206,27 @@ fun CheckProfileScreen(
                 }
             )
         }
+
+        if (showImageDialog && !instructor?.profilePictureUrl.isNullOrEmpty()) {
+            Dialog(onDismissRequest = { showImageDialog = false }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.95f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = instructor?.profilePictureUrl,
+                        contentDescription = "Profile picture fullscreen",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showImageDialog = false },
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+        }
+
     }
 }

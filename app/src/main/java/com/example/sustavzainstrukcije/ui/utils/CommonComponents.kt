@@ -1,5 +1,6 @@
 package com.example.sustavzainstrukcije.ui.utils
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -60,7 +62,9 @@ import java.util.Locale
 import androidx.compose.material3.TimePicker
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
+import coil.compose.AsyncImage
 import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -198,7 +202,6 @@ fun SubjectsInput(
     }
 }
 
-
 @Composable
 fun SubjectSelector(
     subjects: List<String>,
@@ -220,16 +223,42 @@ fun SubjectSelector(
                         onSubjectSelected(subject)
                     }
                 },
-                label = { Text(subject) },
+                label = {
+                    Text(
+                        text = subject,
+                        style = if (isSelected) {
+                            MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        } else {
+                            MaterialTheme.typography.bodyMedium
+                        }
+                    )
+                },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor =
-                        if (isSelected) MaterialTheme.colorScheme.primary else
-                            MaterialTheme.colorScheme.surface
+                    containerColor = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    labelColor = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    }
                 )
             )
         }
     }
 }
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -526,21 +555,32 @@ fun InstructorHorizontalCard(
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                val initial = instructor.name.firstOrNull()?.uppercase() ?: ""
-                if (initial.isNotBlank()) {
-                    Text(
-                        text = initial,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                if (!instructor.profilePictureUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = instructor.profilePictureUrl,
+                        contentDescription = "Profile picture",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
                     )
                 } else {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Avatar",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    val initial = instructor.name.firstOrNull()?.uppercase() ?: ""
+                    if (initial.isNotBlank()) {
+                        Text(
+                            text = initial,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Avatar",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
@@ -574,6 +614,7 @@ fun InstructorHorizontalCard(
         }
     }
 }
+
 
 @Composable
 fun InstructorsHorizontalRow(

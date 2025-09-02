@@ -8,5 +8,6 @@ data class User(
     val subjects: List<String> = emptyList(),
     val availableHours: Map<String, List<String>> = emptyMap(),
     val fcmToken: String? = null, // Za jedan token
-    val fcmTokens: List<String> = emptyList() // Za više tokena (ako korisnik ima više uređaja)
+    val fcmTokens: List<String> = emptyList(), // Za više tokena (ako korisnik ima više uređaja)
+    val profilePictureUrl: String? = null
 )
