@@ -2,6 +2,7 @@ package com.example.sustavzainstrukcije.ui.viewmodels
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.sustavzainstrukcije.ui.data.RatingComment
 import com.example.sustavzainstrukcije.ui.data.User
 import com.google.firebase.firestore.FieldPath
@@ -10,6 +11,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 
 class InstructorsViewModel (
@@ -71,6 +73,10 @@ class InstructorsViewModel (
                     _instructors.value = instructorList
                     _subjects.value = instructorList.flatMap { it.subjects }.distinct().sorted()
                     filterInstructors("", null)
+
+                    viewModelScope.launch {
+                        listenToAllInstructorRatingsForAllSubjects()
+                    }
                 }
             }
     }
@@ -319,6 +325,15 @@ class InstructorsViewModel (
                 }
             }
     }
+
+    fun listenToAllInstructorRatingsForAllSubjects() {
+        viewModelScope.launch {
+            subjects.value.forEach { subject ->
+                listenToAllInstructorRatingsForSubject(subject)
+            }
+        }
+    }
+
 
 
 

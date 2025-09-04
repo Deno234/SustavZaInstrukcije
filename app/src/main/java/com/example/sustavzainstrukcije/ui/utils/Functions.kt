@@ -27,6 +27,11 @@ private fun parseLocalTime(hhmm: String) = LocalTime.parse(hhmm, TIME_FMT)
 
 fun isNowWithinAnyInterval(hours: Map<String, List<String>>): Boolean {
 
+    if (hours.isEmpty()) {
+        Log.d("HOURS", "No working hours loaded, skipping check")
+        return true
+    }
+
     val key = dayKeyForToday()
     val slots = hours[key].orEmpty()
     val now = LocalTime.now()
@@ -38,7 +43,6 @@ fun isNowWithinAnyInterval(hours: Map<String, List<String>>): Boolean {
 
         Log.d("HOURS", "key=${dayKeyForToday()} slots=${hours[dayKeyForToday()]}")
         Log.d("HOURS", "now=${LocalTime.now()} start=$start end=$end in=${!now.isBefore(start) && !now.isAfter(end)}")
-        // inkluzivno: start <= now <= end
         !now.isBefore(start) && !now.isAfter(end)
     }
 }

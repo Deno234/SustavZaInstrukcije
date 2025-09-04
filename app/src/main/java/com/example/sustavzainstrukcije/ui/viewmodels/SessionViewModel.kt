@@ -218,8 +218,8 @@ class SessionViewModel : ViewModel() {
     fun setUserOnline(sessionId: String) {
         val userId = auth.currentUser?.uid ?: return
         val ref = db.getReference("online_users/$sessionId/$userId")
-        ref.setValue(true)
         ref.onDisconnect().removeValue()
+        ref.setValue(true)
 
         firestore.collection("sessions").document(sessionId)
             .get().addOnSuccessListener { snapshot ->

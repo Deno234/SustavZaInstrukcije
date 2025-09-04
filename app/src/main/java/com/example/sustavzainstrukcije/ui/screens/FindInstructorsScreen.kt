@@ -28,12 +28,13 @@ fun FindInstructorsScreen(
     val subjects by instructorsViewModel.subjects.collectAsState()
     val filteredGroupedInstructors by instructorsViewModel.filteredInstructors.collectAsState()
     val ratingsMap by instructorsViewModel.ratingsByInstructorAndSubject.collectAsState()
+    val overallMap by instructorsViewModel.ratingsByInstructor.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf<String?>(null) }
     var sortByRating by remember { mutableStateOf(false) }
 
-    val ratingsOverall by instructorsViewModel.ratingsByInstructor.collectAsState()
+
 
     LaunchedEffect(searchQuery, selectedSubject) {
         instructorsViewModel.filterInstructors(searchQuery, selectedSubject)
@@ -41,7 +42,7 @@ fun FindInstructorsScreen(
 
     LaunchedEffect(selectedSubject) {
         if (selectedSubject == null) {
-            instructorsViewModel.listenToAllInstructorRatings()
+            instructorsViewModel.listenToAllInstructorRatingsForAllSubjects()
         } else {
             instructorsViewModel.listenToAllInstructorRatingsForSubject(selectedSubject!!)
         }
@@ -123,7 +124,7 @@ fun FindInstructorsScreen(
                     filteredGroupedInstructors.forEach { (subject, instructorList) ->
                         val enriched = instructorList.map { instructor ->
                             val key = instructor.id to subject
-                            val ratingData = ratingsMap[key] ?: (0.0 to 0)
+                            val ratingData = ratingsMap[key] ?: (overallMap[instructor.id] ?: (0.0 to 0))
                             Triple(instructor, ratingData.first, ratingData.second)
                         }.let { list ->
                             if (sortByRating) list.sortedByDescending { it.second }
@@ -144,11 +145,7 @@ fun FindInstructorsScreen(
                                         navController.navigate("checkProfile/$instructorId")
                                     },
                                     cardContent = { instructor: User ->
-                                        val (avg, count) = if (selectedSubject != null) {
-                                            ratingsMap[instructor.id to subject] ?: (0.0 to 0)
-                                        } else {
-                                            ratingsOverall[instructor.id] ?: (0.0 to 0)
-                                        }
+                                        val (avg, count) = ratingsMap[instructor.id to subject] ?: (overallMap[instructor.id] ?: (0.0 to 0))
                                         InstructorHorizontalCard(
                                             instructor = instructor,
                                             avgRating = avg,

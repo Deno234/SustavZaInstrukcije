@@ -10,7 +10,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,14 +90,12 @@ import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlinx.coroutines.isActive
 
 private const val HIT_TOLERANCE_SCREEN_PX = 10f
 
@@ -207,65 +204,46 @@ fun WhiteboardScreen(
     }
 
     LaunchedEffect(currentSession?.instructorId) {
-        val hours = loadInstructorHours()
-        withinWorkingHours = isNowWithinAnyInterval(hours) // inicijalno
-
-        // zakazati popup na kraju trenutnog intervala ako smo unutar
-        fun scheduleEndPopup() {
-            val ms = millisUntilEndOfCurrentInterval(hours)
-            if (ms != null && ms > 0L) {
-                scope.launch {
-                    kotlinx.coroutines.delay(ms)
-                    // ponovno provjeri (ako je sada izvan)
-                    val nowOk = isNowWithinAnyInterval(hours)
-                    if (!nowOk) {
-                        withinWorkingHours = false
-                        showOvertimeDialog = true
-                    }
-                }
-            }
+        suspend fun loadHours(): Map<String, List<String>> {
+            val instrId = currentSession?.instructorId ?: return emptyMap()
+            val snap = Firebase.firestore.collection("users").document(instrId).get().await()
+            @Suppress("UNCHECKED_CAST")
+            return snap.get("availableHours") as? Map<String, List<String>> ?: emptyMap()
         }
-        if (withinWorkingHours) scheduleEndPopup()
 
-        // safety net: periodična provjera svakih 60 s
-        scope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(60_000)
-                val nowOk = isNowWithinAnyInterval(hours)
-                if (nowOk != withinWorkingHours) {
-                    withinWorkingHours = nowOk
-                    if (!nowOk) {
-                        showOvertimeDialog = true
-                    }
-                }
+        while (isActive) {
+            val hoursStr = loadHours()
+
+            val inside = isNowWithinAnyInterval(hoursStr)
+            withinWorkingHours = inside
+            if (!inside) {
+                Log.d("HOURS", "Overtime triggered, inside=$inside")
+                showOvertimeDialog = true
+                break
+            }
+
+            val ms = millisUntilEndOfCurrentInterval(hoursStr)
+            Log.d("HOURS", "inside=$inside ms=$ms")
+
+            if (ms != null && ms > 0L) {
+                kotlinx.coroutines.delay(ms)
+            } else {
+                kotlinx.coroutines.delay(30_000)
             }
         }
     }
+
+
 
 
 
 
     DisposableEffect(sessionId, currentUserId) {
-        if (currentUserIsInstructor) {
-            val presenceRef = Firebase.firestore
-                .collection("onlineUsers")
-                .document(sessionId)
-
-            presenceRef.set(
-                mapOf("userIds" to FieldValue.arrayUnion(currentUserId)),
-                SetOptions.merge()
-            )
-
-            onDispose {
-                presenceRef.update("userIds", FieldValue.arrayRemove(currentUserId))
-            }
-        } else {
-            onDispose { }
+        sessionViewModel.setUserOnline(sessionId)
+        onDispose {
+            sessionViewModel.setUserOffline(sessionId)
         }
     }
-
-
-
 
     LaunchedEffect(sessionId) {
         sessionViewModel.loadSession(sessionId)
@@ -816,19 +794,6 @@ fun WhiteboardScreen(
                 },
                 onDismiss = { showColorPicker = false }
             )
-        }
-
-        DisposableEffect(sessionId) {
-            onDispose {
-                sessionViewModel.setUserOffline(sessionId)
-            }
-        }
-
-        DisposableEffect(Unit) {
-            sessionViewModel.setUserOnline(sessionId)
-            onDispose {
-                sessionViewModel.setUserOffline(sessionId)
-            }
         }
 
 

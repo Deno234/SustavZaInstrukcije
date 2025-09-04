@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,9 +57,6 @@ fun RegisterScreen(
     var availableTime by rememberSaveable { mutableStateOf(emptyMap<String, List<String>>())}
     var passwordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    val allSubjects = listOf("Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Literature", "History", "Geography")
-
-    var emailError by remember { mutableStateOf<String?>(null)}
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
