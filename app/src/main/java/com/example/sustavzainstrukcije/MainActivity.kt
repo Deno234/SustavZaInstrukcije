@@ -154,7 +154,6 @@ class MainActivity : ComponentActivity() {
             }
         } ?: Log.d("MainActivity", "No extras found in intent")
 
-        // Provjeravanje i FCM podataka i MyFirebaseMessagingService podataka
         val navigateTo = intent.getStringExtra("navigateTo")
         val chatId = intent.getStringExtra("chatId")
         val otherUserId = intent.getStringExtra("otherUserId")
@@ -162,7 +161,6 @@ class MainActivity : ComponentActivity() {
         Log.d("MainActivity", "NavigateTo value: '$navigateTo'")
         Log.d("MainActivity", "ChatId: '$chatId', OtherUserId: '$otherUserId'")
 
-        // Provjeravanje ima li podataka za navigaciju (bilo iz MyFirebaseMessagingService ili direktno iz FCM)
         if ((navigateTo == "ChatScreen" || (chatId != null && otherUserId != null)) &&
             chatId != null && otherUserId != null) {
 
@@ -198,6 +196,14 @@ class MainActivity : ComponentActivity() {
             } else {
                 Log.w("MainActivity", "NavController not initialized")
             }
+        } else if (navigateTo == "StudentInvitations") {
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(500)
+                appNavController.navigate("student_sessions?openInvitations=true") {
+                    launchSingleTop = true
+                }
+            }
+            intent.removeExtra("navigateTo")
         } else {
             Log.d("MainActivity", "No ChatScreen navigation requested. NavigateTo: '$navigateTo', ChatId: '$chatId', OtherUserId: '$otherUserId'")
         }

@@ -1,24 +1,32 @@
 package com.example.sustavzainstrukcije.ui.utils
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -52,6 +60,12 @@ import androidx.compose.ui.unit.dp
 import com.example.sustavzainstrukcije.ui.data.User
 import java.util.Locale
 import androidx.compose.material3.TimePicker
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
+import coil.compose.AsyncImage
+import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,12 +113,17 @@ fun SubjectsInput(
     subjects: List<String>,
     availableSubjects: List<String>,
     onSubjectAdded: (String) -> Unit,
-    onSubjectRemoved: (String) -> Unit
+    onSubjectRemoved: (String) -> Unit,
+    onAddNewSubject: (String) -> Unit,
+    onNotify: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     var selectedSubject by remember { mutableStateOf("") }
+    var newSubject by remember { mutableStateOf("") }
 
-    val filteredAvailableSubjects = availableSubjects.filter { it !in subjects }.sorted()
+    val filteredAvailableSubjects = availableSubjects
+        .filter { it !in subjects }
+        .sorted()
 
     Column {
         Text("Subjects you teach:", style = MaterialTheme.typography.labelMedium)
@@ -129,11 +148,7 @@ fun SubjectsInput(
             }
         }
 
-
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
             OutlinedTextField(
                 value = selectedSubject,
                 onValueChange = {},
@@ -144,11 +159,7 @@ fun SubjectsInput(
                     .fillMaxWidth()
                     .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
             )
-
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 filteredAvailableSubjects.forEach { subject ->
                     DropdownMenuItem(
                         text = { Text(subject) },
@@ -160,6 +171,33 @@ fun SubjectsInput(
                     )
                 }
             }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = newSubject,
+            onValueChange = { newSubject = it },
+            label = { Text("Add new subject") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Button(onClick = {
+            val candidate = newSubject.trim()
+            if (candidate.isEmpty()) {
+                onNotify("Subject cannot be empty")
+                return@Button
+            }
+            val existsInGlobal = availableSubjects.any { it.equals(candidate, ignoreCase = true) }
+            val existsInLocal = subjects.any { it.equals(candidate, ignoreCase = true) }
+            if (existsInGlobal || existsInLocal) {
+                onNotify("Subject already exists")
+                return@Button
+            }
+            onAddNewSubject(candidate)
+            onSubjectAdded(candidate)
+            newSubject = ""
+            onNotify("Subject added")
+        }) {
+            Text("Add")
         }
     }
 }
@@ -185,16 +223,42 @@ fun SubjectSelector(
                         onSubjectSelected(subject)
                     }
                 },
-                label = { Text(subject) },
+                label = {
+                    Text(
+                        text = subject,
+                        style = if (isSelected) {
+                            MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        } else {
+                            MaterialTheme.typography.bodyMedium
+                        }
+                    )
+                },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor =
-                        if (isSelected) MaterialTheme.colorScheme.primary else
-                            MaterialTheme.colorScheme.surface
+                    containerColor = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    labelColor = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    }
                 )
             )
         }
     }
 }
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -241,6 +305,7 @@ fun DaySelector(
 fun AvailableHoursInput(
     availableHours: Map<String, List<String>>,
     onHoursUpdated: (Map<String, List<String>>) -> Unit,
+    onNotify: (String) -> Unit
 ) {
     var showAddHoursDialog by remember { mutableStateOf(false) }
     var showViewHoursDialog by remember { mutableStateOf(false) }
@@ -352,22 +417,36 @@ fun AvailableHoursInput(
             confirmButton = {
                 Button(onClick = {
                     if (selectedDay.isNotBlank() && startTime.isNotBlank() && endTime.isNotBlank()) {
+
+                        if (!isValidRange(startTime, endTime)) {
+                            onNotify("Start hour starts after end hour")
+                            return@Button
+                        }
+
+                        val currentSlots = availableHours[selectedDay] ?: emptyList()
+                        if (overlapsAny(currentSlots, startTime, endTime)) {
+                            onNotify("Time slot overlaps with existing slots")
+                            return@Button
+                        }
+
                         val timeSlot = "$startTime - $endTime"
-                        val updatedAvailableHours =
-                            availableHours.toMutableMap()
-                        val currentSlots =
-                            updatedAvailableHours[selectedDay] ?: emptyList()
-                        val newSlots =
-                            (currentSlots + timeSlot).sortedBy { it.split(" - ")[0] }
-                        updatedAvailableHours[selectedDay] =
-                            newSlots
-                        onHoursUpdated(updatedAvailableHours)
+                        val updated = availableHours.toMutableMap()
+                        val newSlots = (currentSlots + timeSlot)
+                            .sortedBy { parseTimeHHmm(it.substringBefore(" - ")) }
+                        updated[selectedDay] = newSlots
+                        onHoursUpdated(updated)
+
                         showAddHoursDialog = false
+                        selectedDay = ""
+                        startTime = ""
+                        endTime = ""
+
+                        onNotify("Time slot added")
                     }
-                }) {
-                    Text("Add")
-                }
-            },
+                }) { Text("Add") }
+            }
+
+            ,
             dismissButton = {
                 TextButton(onClick = {
                     showAddHoursDialog = false
@@ -450,11 +529,100 @@ private fun TimePickerDialog(
 }
 
 @Composable
+fun InstructorHorizontalCard(
+    instructor: User,
+    modifier: Modifier = Modifier,
+    avgRating: Double = 0.0,
+    ratingCount: Int = 0,
+    onCheckProfile: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .width(200.dp)
+            .clickable { onCheckProfile() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!instructor.profilePictureUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = instructor.profilePictureUrl,
+                        contentDescription = "Profile picture",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    val initial = instructor.name.firstOrNull()?.uppercase() ?: ""
+                    if (initial.isNotBlank()) {
+                        Text(
+                            text = initial,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Avatar",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = instructor.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+
+            if (!instructor.subjects.isNullOrEmpty()) {
+                Text(
+                    text = instructor.subjects.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                RatingBar(rating = avgRating.toFloat())
+                Text(
+                    text = "(${ratingCount})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
 fun InstructorsHorizontalRow(
     title: String,
     instructors: List<User>,
     modifier: Modifier = Modifier,
-    onCheckProfile: (intructorId: String) -> Unit
+    onCheckProfile: (instructorId: String) -> Unit,
+    cardContent: @Composable (User) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -468,55 +636,8 @@ fun InstructorsHorizontalRow(
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            /**
-             * Zašto je dobro koristiti items:
-             * items - works within LazyRow/LazyColumn
-             * More efficient for large lists
-             * Lazy - only renders visible items
-             * Efficient -> only updates changed items
-             */
             items(instructors) { instructor ->
-                InstructorHorizontalCard(
-                    instructor = instructor,
-                    onCheckProfile = { onCheckProfile(instructor.id) })
-            }
-        }
-    }
-}
-
-@Composable
-fun InstructorHorizontalCard(
-    instructor: User,
-    onCheckProfile: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(280.dp)
-            .padding(top = 8.dp)
-            .padding(end = 8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth()
-        ) {
-            Text(
-                text = instructor.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Teaches: ${instructor.subjects.sorted().joinToString(", ")}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = onCheckProfile,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            ) {
-                Text("Check Profile")
+                cardContent(instructor)
             }
         }
     }
@@ -560,3 +681,60 @@ fun SubjectDropdown(
         }
     }
 }
+
+private fun parseTimeHHmm(t: String): LocalTime =
+    LocalTime.parse(t) // očekuje "HH:mm" format, npr. "08:45"
+
+private fun isValidRange(start: String, end: String): Boolean {
+    val s = parseTimeHHmm(start)
+    val e = parseTimeHHmm(end)
+    return s < e
+}
+
+private fun overlapsAny(
+    daySlots: List<String>,
+    newStartStr: String,
+    newEndStr: String
+): Boolean {
+    val newStart = parseTimeHHmm(newStartStr)
+    val newEnd = parseTimeHHmm(newEndStr)
+
+    return daySlots.any { slot ->
+        val sStr = slot.substringBefore(" - ")
+        val eStr = slot.substringAfter(" - ")
+        val s = parseTimeHHmm(sStr)
+        val e = parseTimeHHmm(eStr)
+        (newStart < e) && (newEnd > s)
+    }
+}
+
+@Composable
+fun RatingBar(
+    rating: Float,
+    maxRating: Int = 5,
+    modifier: Modifier = Modifier,
+    starSize: Dp = 25.dp,
+    onRatingSelected: ((Int) -> Unit)? = null
+) {
+    Row(modifier = modifier) {
+        for (i in 1..maxRating) {
+            val filled = i <= rating
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = "Star $i",
+                tint = if (filled) Color(0xFFFFD700) else Color.Gray,
+                modifier = Modifier
+                    .size(starSize)
+                    .then(
+                        if (onRatingSelected != null) {
+                            Modifier.clickable { onRatingSelected(i) }
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
+        }
+    }
+}
+
+

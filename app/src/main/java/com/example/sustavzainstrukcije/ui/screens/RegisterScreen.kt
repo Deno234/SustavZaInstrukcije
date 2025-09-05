@@ -14,12 +14,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -32,13 +38,16 @@ import com.example.sustavzainstrukcije.ui.theme.SustavZaInstrukcijeTheme
 import com.example.sustavzainstrukcije.ui.utils.AvailableHoursInput
 import com.example.sustavzainstrukcije.ui.utils.RoleSelector
 import com.example.sustavzainstrukcije.ui.utils.SubjectsInput
+import com.example.sustavzainstrukcije.ui.viewmodels.SubjectsViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 
 @Composable
 fun RegisterScreen(
     onRegistrationComplete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subjectsViewModel: SubjectsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
@@ -48,104 +57,137 @@ fun RegisterScreen(
     var availableTime by rememberSaveable { mutableStateOf(emptyMap<String, List<String>>())}
     var passwordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    val allSubjects = listOf("Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Literature", "History", "Geography")
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Create Account",
-            style = MaterialTheme.typography.headlineMedium
-        )
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Full Name") },
-            modifier = Modifier.fillMaxWidth()
-        )
+    val subjectsFromDb by subjectsViewModel.subjects.collectAsState()
 
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth()
-        )
+    fun notify(msg: String) {
+        scope.launch { snackbarHostState.showSnackbar(message = msg) }
+    }
 
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            visualTransformation = if (passwordVisible)
-            VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible)
-                        Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = "Toggle password visibility"
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        RoleSelector(
-            selectedRole = role,
-            onRoleSelected = { role = it }
-        )
-
-        if (role == "instructor") {
-            SubjectsInput(
-                subjects = subjects,
-                availableSubjects = allSubjects,
-                onSubjectAdded = { newSubject ->
-                    subjects = subjects + newSubject
-                },
-                onSubjectRemoved = { subjectToRemove ->
-                    subjects = subjects.filter { it != subjectToRemove }
-                }
-            )
-
-            AvailableHoursInput(
-                availableHours = availableTime,
-                onHoursUpdated = { availableTime = it }
-            )
-        }
-
-
-        errorMessage?.let {
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+    ) { padding ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(32.dp)
+                .padding(padding),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp)
+                text = "Create Account",
+                style = MaterialTheme.typography.headlineMedium
             )
-        }
 
-        Button(
-            onClick = {
-                if (validateForm(role, subjects, availableTime)) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Full Name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = {
+                    email = it
+                },
+                label = { Text("Email") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                visualTransformation = if (passwordVisible)
+                    VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible)
+                                Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle password visibility"
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            RoleSelector(
+                selectedRole = role,
+                onRoleSelected = { role = it }
+            )
+
+            if (role == "instructor") {
+                SubjectsInput(
+                    subjects = subjects,
+                    availableSubjects = subjectsFromDb,
+                    onSubjectAdded = { s -> subjects = subjects + s },
+                    onSubjectRemoved = { s -> subjects = subjects - s },
+                    onAddNewSubject = { candidate ->
+                        scope.launch {
+                            val added = subjectsViewModel.addSubjectIfMissing(candidate)
+                        }
+                    },
+                    onNotify = ::notify
+                )
+
+                AvailableHoursInput(
+                    availableHours = availableTime,
+                    onHoursUpdated = { availableTime = it },
+                    onNotify = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                )
+            }
+
+
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            Button(
+                onClick = {
+
+                    val valid = validateForm(role, subjects, availableTime)
+                    if (!valid) {
+                        when {
+                            role == "instructor" && subjects.isEmpty() -> notify("Choose at least one subject")
+                            role == "instructor" && availableTime.isEmpty() -> notify("Add at least one available time")
+                            else -> notify("Please complete all required fields.")
+                        }
+                        return@Button
+                    }
+
+
                     registerUser(
                         name = name,
-                        email = email,
+                        email = email.trim(),
                         password = password,
                         role = role,
                         subjects = subjects,
                         availableHours = availableTime,
-                        onSuccess = onRegistrationComplete,
-                        onError = { errorMessage = it }
+                        onSuccess = {
+                            notify("Registration successful")
+                            onRegistrationComplete()
+                        },
+                        onError = { msg ->
+                            notify(msg)
+                        }
                     )
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Register")
-        }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Register")
+            }
 
+        }
     }
 
 }

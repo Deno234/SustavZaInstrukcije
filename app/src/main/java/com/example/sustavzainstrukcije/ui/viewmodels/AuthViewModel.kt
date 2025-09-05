@@ -1,6 +1,7 @@
 package com.example.sustavzainstrukcije.ui.viewmodels
 
 import android.app.Application
+import android.net.Uri
 import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -273,5 +274,38 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "AuthViewModel"
     }
+
+    fun updateProfilePicture(uri: Uri) {
+        val userId = this.currentUserId ?: run {
+            Log.w(TAG, "Cannot update profile picture: currentUserId is null.")
+            viewModelScope.launch { _errorMessage.emit("Not logged in.") }
+            return
+        }
+
+        val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance()
+            .reference.child("profile_pictures/$userId.jpg")
+
+        storageRef.putFile(uri)
+            .addOnSuccessListener {
+                storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
+                    val url = downloadUri.toString()
+                    db.collection("users").document(userId)
+                        .update("profilePictureUrl", url)
+                        .addOnSuccessListener {
+                            Log.d(TAG, "Profile picture updated for $userId")
+                            fetchCurrentUserData()
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Error saving profile picture URL", e)
+                            viewModelScope.launch { _errorMessage.emit("Error saving profile picture.") }
+                        }
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error uploading profile picture", e)
+                viewModelScope.launch { _errorMessage.emit("Error uploading picture.") }
+            }
+    }
+
 
 }

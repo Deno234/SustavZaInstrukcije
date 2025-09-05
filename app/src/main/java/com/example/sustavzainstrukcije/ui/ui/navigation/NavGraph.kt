@@ -26,6 +26,7 @@ import com.example.sustavzainstrukcije.ui.screens.InstructorSessionsScreen
 import com.example.sustavzainstrukcije.ui.screens.LoginScreen
 import com.example.sustavzainstrukcije.ui.screens.MainScreen
 import com.example.sustavzainstrukcije.ui.screens.ProfileScreen
+import com.example.sustavzainstrukcije.ui.screens.RatingsScreen
 import com.example.sustavzainstrukcije.ui.screens.RegisterScreen
 import com.example.sustavzainstrukcije.ui.screens.StudentSessionsScreen
 import com.example.sustavzainstrukcije.ui.screens.WhiteboardScreen
@@ -170,6 +171,11 @@ fun NavGraph(
             } else {
                 Text("Error: Missing session ID.")
             }
+        }
+
+        composable("ratings/{instructorId}") { backStackEntry ->
+            val instructorId = backStackEntry.arguments?.getString("instructorId")!!
+            RatingsScreen(navController, instructorId)
         }
     }
 }

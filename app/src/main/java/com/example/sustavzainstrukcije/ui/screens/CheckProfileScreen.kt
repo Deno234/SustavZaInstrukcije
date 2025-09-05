@@ -1,72 +1,51 @@
 package com.example.sustavzainstrukcije.ui.screens
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.sustavzainstrukcije.ui.utils.Constants.ORDERED_DAYS
-import com.example.sustavzainstrukcije.ui.utils.generateChatId
+import coil.compose.AsyncImage
+import com.example.sustavzainstrukcije.ui.utils.*
 import com.example.sustavzainstrukcije.ui.viewmodels.AuthViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.InstructorsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckProfileScreen(
-    instructorId: String,
     navController: NavController,
+    instructorId: String,
     instructorsViewModel: InstructorsViewModel = viewModel(),
     authViewModel: AuthViewModel = viewModel()
 ) {
     val instructor by instructorsViewModel.checkedInstructor.collectAsState()
-    var showTimeSlots by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    var showHoursDialog by remember { mutableStateOf(false) }
+    var showImageDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(instructorId) {
         instructorsViewModel.fetchCheckedInstructor(instructorId)
-        authViewModel.fetchCurrentUserData()
     }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = "Instructor Details",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                },
+                title = { Text("Instructor Profile") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -74,121 +53,180 @@ fun CheckProfileScreen(
                 }
             )
         }
-    ) { innerPadding ->
-        Box(
+    ) { padding ->
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    shape = MaterialTheme.shapes.large
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!instructor?.profilePictureUrl.isNullOrEmpty()) {
+                                AsyncImage(
+                                    model = instructor?.profilePictureUrl,
+                                    contentDescription = "Profile picture",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .clickable { showImageDialog = true },
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                val initial = instructor?.name?.firstOrNull()?.uppercase() ?: "?"
+                                if (initial.isNotBlank()) {
+                                    Text(
+                                        text = initial,
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = "Avatar",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+
+
                         Text(
-                            text = instructor?.name ?: "Loading...",
-                            style = MaterialTheme.typography.headlineSmall
+                            instructor?.name ?: "Loading...",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = instructor?.email ?: "",
-                            style = MaterialTheme.typography.bodyMedium
+                            instructor?.email ?: "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Subjects: ${instructor?.subjects?.joinToString(", ") ?: ""}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        if (!instructor?.subjects.isNullOrEmpty()) {
+                            Text(
+                                "Subjects: ${instructor?.subjects?.joinToString(", ")}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(24.dp))
+            if (!instructor?.subjects.isNullOrEmpty()) {
+                item {
+                    FilledTonalButton(
+                        onClick = {
+                            navController.navigate("ratings/$instructorId")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("View Ratings & Comments")
+                    }
+                }
+            }
 
-                Button(
+            item {
+                FilledTonalButton(
                     onClick = {
-                        navController.navigate("chat/${authViewModel.currentUserId?.let {
-                            generateChatId(it, instructorId)
-                        }}/$instructorId")
+                        navController.navigate(
+                            "chat/${authViewModel.currentUserId?.let { generateChatId(it, instructorId) }}/$instructorId"
+                        )
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Chat with Instructor")
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = { showTimeSlots = !showTimeSlots },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (showTimeSlots) "Hide Time Slots" else "Show Time Slots")
-                }
-
-                if (showTimeSlots) {
-                    instructor?.let {
-                        TimeSlotsSection(
-                            onDismissRequest = { showTimeSlots = false },
-                            availableHours = it.availableHours
-                        )
-                    }
-                }
             }
-        }
-    }
 
+            if (instructor != null) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("Available Hours", style = MaterialTheme.typography.titleMedium)
 
-}
-
-@Composable
-fun TimeSlotsSection(onDismissRequest: () -> Unit, availableHours: Map<String, List<String>>) {
-
-    val sortedAvailableHours = ORDERED_DAYS.associateWith { day ->
-        availableHours[day] ?: emptyList()
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text("Selected Hours") },
-        text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                sortedAvailableHours.forEach { (day, slots) ->
-                    if (slots.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = day,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                        items(slots) { slot ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = slot,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(vertical = 4.dp)
-                                )
+                            Button(onClick = { showHoursDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Show Available Hours")
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text("Close")
+        }
+
+        if (showHoursDialog && instructor != null) {
+            AlertDialog(
+                onDismissRequest = { showHoursDialog = false },
+                title = { Text("Available Hours") },
+                text = {
+                    val orderedDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+                    Column {
+                        orderedDays.forEach { day ->
+                            val slots = instructor!!.availableHours[day] ?: emptyList()
+                            if (slots.isNotEmpty()) {
+                                Text(day, style = MaterialTheme.typography.titleMedium)
+                                slots.forEach { slot ->
+                                    Text("- $slot", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showHoursDialog = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
+        if (showImageDialog && !instructor?.profilePictureUrl.isNullOrEmpty()) {
+            Dialog(onDismissRequest = { showImageDialog = false }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.95f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = instructor?.profilePictureUrl,
+                        contentDescription = "Profile picture fullscreen",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showImageDialog = false },
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         }
-    )
+
+    }
 }

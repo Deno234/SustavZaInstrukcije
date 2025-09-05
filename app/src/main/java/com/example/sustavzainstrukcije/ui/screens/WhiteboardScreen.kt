@@ -10,7 +10,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,16 +84,18 @@ import com.example.sustavzainstrukcije.ui.data.EraseMode
 import com.example.sustavzainstrukcije.ui.data.Hit
 import com.example.sustavzainstrukcije.ui.data.Point
 import com.example.sustavzainstrukcije.ui.data.ToolMode
+import com.example.sustavzainstrukcije.ui.utils.isNowWithinAnyInterval
+import com.example.sustavzainstrukcije.ui.utils.millisUntilEndOfCurrentInterval
 import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
 import com.example.sustavzainstrukcije.ui.viewmodels.WhiteboardViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.tasks.await
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlinx.coroutines.isActive
 
 private const val HIT_TOLERANCE_SCREEN_PX = 10f
 
@@ -169,6 +172,18 @@ fun WhiteboardScreen(
     val minScale = 0.25f
     val maxScale = 5f
 
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var withinWorkingHours by remember { mutableStateOf(true) }
+    var showOvertimeDialog by remember { mutableStateOf(false) }
+
+    suspend fun loadInstructorHours(): Map<String, List<String>> {
+        val instrId = currentSession?.instructorId ?: return emptyMap()
+        val snap = Firebase.firestore.collection("users").document(instrId).get().await()
+        @Suppress("UNCHECKED_CAST")
+        return snap.get("availableHours") as? Map<String, List<String>> ?: emptyMap()
+    }
+
     fun worldToScreen(p: Point, pan: Offset, scale: Float) =
         Offset((p.x - pan.x) * scale, (p.y - pan.y) * scale)
 
@@ -188,30 +203,47 @@ fun WhiteboardScreen(
         pan -= offsetChange / scale
     }
 
+    LaunchedEffect(currentSession?.instructorId) {
+        suspend fun loadHours(): Map<String, List<String>> {
+            val instrId = currentSession?.instructorId ?: return emptyMap()
+            val snap = Firebase.firestore.collection("users").document(instrId).get().await()
+            @Suppress("UNCHECKED_CAST")
+            return snap.get("availableHours") as? Map<String, List<String>> ?: emptyMap()
+        }
 
+        while (isActive) {
+            val hoursStr = loadHours()
 
-
-    DisposableEffect(sessionId, currentUserId) {
-        if (currentUserIsInstructor) {
-            val presenceRef = Firebase.firestore
-                .collection("onlineUsers")
-                .document(sessionId)
-
-            presenceRef.set(
-                mapOf("userIds" to FieldValue.arrayUnion(currentUserId)),
-                SetOptions.merge()
-            )
-
-            onDispose {
-                presenceRef.update("userIds", FieldValue.arrayRemove(currentUserId))
+            val inside = isNowWithinAnyInterval(hoursStr)
+            withinWorkingHours = inside
+            if (!inside) {
+                Log.d("HOURS", "Overtime triggered, inside=$inside")
+                showOvertimeDialog = true
+                break
             }
-        } else {
-            onDispose { }
+
+            val ms = millisUntilEndOfCurrentInterval(hoursStr)
+            Log.d("HOURS", "inside=$inside ms=$ms")
+
+            if (ms != null && ms > 0L) {
+                kotlinx.coroutines.delay(ms)
+            } else {
+                kotlinx.coroutines.delay(30_000)
+            }
         }
     }
 
 
 
+
+
+
+    DisposableEffect(sessionId, currentUserId) {
+        sessionViewModel.setUserOnline(sessionId)
+        onDispose {
+            sessionViewModel.setUserOffline(sessionId)
+        }
+    }
 
     LaunchedEffect(sessionId) {
         sessionViewModel.loadSession(sessionId)
@@ -279,8 +311,28 @@ fun WhiteboardScreen(
                 IconButton(onClick = { showDeleteDialog = true }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete page")
                 }
+                IconButton(onClick = {  }) {
+                    val color = if (withinWorkingHours) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                    )
+                }
             }
         )
+
+        if (showOvertimeDialog) {
+            AlertDialog(
+                onDismissRequest = {  },
+                title = { Text("Working hours exceeded") },
+                text = { Text("You are now outside your defined working hours.") },
+                confirmButton = {
+                    TextButton(onClick = { showOvertimeDialog = false }) { Text("Close") }
+                }
+            )
+        }
 
         // Navigacija kroz stranice
         Row(
@@ -429,15 +481,12 @@ fun WhiteboardScreen(
                     .fillMaxSize()
                     .clipToBounds()
                     .background(Color.White)
-                    // 1) Transform + double tap: SAMO u FREE_ROAM
-                    // transformable + hvatanje centroida: SAMO u FREE_ROAM
                     .then(
                         if (toolMode == ToolMode.FREE_ROAM && !isEraser) {
                             Modifier.pointerInput(Unit) {
                                 detectTransformGestures(panZoomLock = true) { centroid, panChange, zoomChange, _ ->
                                     val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
 
-                                    // Zoom tako da prsti ostanu na istom mjestu u world koordinatama
                                     if (newScale != scale) {
                                         val worldBefore = screenToWorld(centroid, pan, scale)
                                         scale = newScale
@@ -445,16 +494,14 @@ fun WhiteboardScreen(
                                         pan -= Offset(worldAfter.x - worldBefore.x, worldAfter.y - worldBefore.y)
                                     }
 
-                                    // Pan
                                     pan -= panChange / scale
                                 }
                             }
                         } else {
-                            Modifier // ostalo ponašanje za druge alate
+                            Modifier
                         }
 
                     )
-                    // 3) Double-tap reset
                     .then(
                         if (toolMode == ToolMode.FREE_ROAM && !isEraser)
                             Modifier.pointerInput(toolMode, scale, pan) {
@@ -475,7 +522,7 @@ fun WhiteboardScreen(
                                     if (isEraser && eraserMode == EraseMode.STROKE) {
                                         val world = screenToWorld(offset, pan, scale)
                                         val candidates = strokes.asReversed().mapIndexedNotNull { idx, s ->
-                                            if (s.color == "#FFFFFF") return@mapIndexedNotNull null // ako želiš preskakati “paint erase” poteze
+                                            if (s.color == "#FFFFFF") return@mapIndexedNotNull null
                                             val d = distanceToStrokeWorld(world.x, world.y, s, scale)
                                             val tol = maxOf(screenTolToWorld(scale), s.strokeWidth * 0.75f)
                                             if (d <= tol) Hit(s, d, idx) else null
@@ -486,7 +533,7 @@ fun WhiteboardScreen(
                                     else if (!isEraser) {
                                         if (toolMode == ToolMode.TEXT) {
                                             showTextInputDialog = true
-                                            textInputOffset = Offset(world.x, world.y) // spremi world lokaciju
+                                            textInputOffset = Offset(world.x, world.y)
                                         } else if (toolMode == ToolMode.POINTER) {
                                             whiteboardViewModel.sendPointer(sessionId, Point(world.x, world.y))
                                         } else {
@@ -511,7 +558,7 @@ fun WhiteboardScreen(
                                         val w = screenToWorld(startOffset, pan, scale)
                                         currentPoints = listOf(Point(w.x, w.y))
                                         if (toolMode == ToolMode.DRAW || (isEraser && eraserMode == EraseMode.COLOR)) {
-                                            currentPath = Path().apply { moveTo((w.x - pan.x) * scale, (w.y - pan.y) * scale) } // vidi napomenu dolje
+                                            currentPath = Path().apply { moveTo((w.x - pan.x) * scale, (w.y - pan.y) * scale) }
                                         }
                                     },
                                     onDrag = { change, _ ->
@@ -527,7 +574,6 @@ fun WhiteboardScreen(
                                         when {
                                             isEraser && eraserMode == EraseMode.COLOR -> {
                                                 currentPoints = currentPoints + newPoint
-                                                // ako koristiš Path za preview, Path radi u screen space-u:
                                                 currentPath.lineTo((w.x - pan.x) * scale, (w.y - pan.y) * scale)
                                             }
                                             toolMode == ToolMode.DRAW -> {
@@ -557,9 +603,9 @@ fun WhiteboardScreen(
                                                 else -> null
                                             }
                                             whiteboardViewModel.addStroke(
-                                                points = currentPoints,          // world točke!
+                                                points = currentPoints,
                                                 color = strokeColor,
-                                                strokeWidth = strokeWidthToUse,  // world debljina!
+                                                strokeWidth = strokeWidthToUse,
                                                 shapeType = shapeType
                                             )
                                         }
@@ -665,7 +711,7 @@ fun WhiteboardScreen(
 
                 pointers.forEach { (userId, point) ->
                     val sp = worldToScreen(point, pan, scale)
-                    drawCircle(Color.Red, center = sp, radius = 10f) // možeš držati fiksno 10f u screen space-u
+                    drawCircle(Color.Red, center = sp, radius = 10f)
                     val label = userNames[userId] ?: userId.take(6)
                     drawContext.canvas.nativeCanvas.drawText(
                         label, sp.x + 12, sp.y - 12,
@@ -742,19 +788,6 @@ fun WhiteboardScreen(
                 },
                 onDismiss = { showColorPicker = false }
             )
-        }
-
-        DisposableEffect(sessionId) {
-            onDispose {
-                sessionViewModel.setUserOffline(sessionId)
-            }
-        }
-
-        DisposableEffect(Unit) {
-            sessionViewModel.setUserOnline(sessionId)
-            onDispose {
-                sessionViewModel.setUserOffline(sessionId)
-            }
         }
 
 
@@ -1147,8 +1180,7 @@ fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): F
     val aabb = AabbExpand(strokeAabb(s), bboxMargin)
     if (!inAabb(x, y, aabb)) return Float.POSITIVE_INFINITY
 
-    // Vrati minimalnu metriku udaljenosti po tipu (isti uvjeti kao u isTouchingStroke),
-    // ali BEZ praga, samo “koliko je daleko” (0..∞).
+
     return when {
         s.shapeType?.startsWith("text:") == true && s.points.size == 1 -> {
             // bbox distance do pravokutnika (0 kada je unutra)
@@ -1176,7 +1208,6 @@ fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): F
             val right = maxOf(s.points[0].x, s.points[1].x)
             val top = minOf(s.points[0].y, s.points[1].y)
             val bottom = maxOf(s.points[0].y, s.points[1].y)
-            // dist do rubova okvira (min od 4 ruba), 0 ako si na rubu; izvan “unutrašnjosti” vraća udaljenost do najbližeg ruba
             val dxLeft = abs(x - left)
             val dxRight = abs(x - right)
             val dyTop = abs(y - top)
@@ -1217,7 +1248,6 @@ fun distanceToStrokeWorld(x: Float, y: Float, s: DrawingStroke, scale: Float): F
 }
 
 fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float, scale: Float): Boolean {
-    // Ako želiš da Remove Stroke pogađa i “white paint” tragove, ukloni ovu liniju:
     if (stroke.color == "#FFFFFF") return false
 
     val worldTol = screenTolToWorld(scale)
@@ -1230,7 +1260,6 @@ fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float, scale: Float): B
 
     return when {
         stroke.shapeType?.startsWith("text:") == true && stroke.points.size == 1 -> {
-            // Koristi worldTol za “unutra” proširenje
             val textX = stroke.points[0].x
             val textY = stroke.points[0].y
             val fontSizeWorld = stroke.shapeType.substringAfter("font=").substringBefore(";").toFloatOrNull()
@@ -1267,7 +1296,6 @@ fun isTouchingStroke(stroke: DrawingStroke, x: Float, y: Float, scale: Float): B
             val (x1, y1) = stroke.points[0]
             val (x2, y2) = stroke.points[1]
             val distance = pointToSegmentDistance(x, y, x1, y1, x2, y2)
-            // BBox s istim marginom kao i distance prag
             val margin = edgeTol
             val minX = minOf(x1, x2) - margin
             val maxX = maxOf(x1, x2) + margin

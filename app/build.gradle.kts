@@ -91,4 +91,5 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation(libs.dotenv.kotlin)
+    implementation(libs.coil.android)
 }

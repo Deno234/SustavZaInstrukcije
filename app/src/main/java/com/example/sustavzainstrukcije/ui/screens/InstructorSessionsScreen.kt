@@ -15,18 +15,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -34,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sustavzainstrukcije.ui.data.InstructionSession
 import com.example.sustavzainstrukcije.ui.viewmodels.SessionViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,6 +56,11 @@ fun InstructorSessionsScreen(
     val sessions by sessionViewModel.sessions.collectAsState()
     val userNames by sessionViewModel.userNames.collectAsState()
     val lastVisitedMap by sessionViewModel.lastVisitedMap.collectAsState()
+
+    val scope = rememberCoroutineScope()
+    var pendingRoute by remember { mutableStateOf<String?>(null) }
+    var showConfirmOutsideHours by remember { mutableStateOf(false) }
+
 
     LaunchedEffect(Unit) {
         sessionViewModel.getInstructorSessions()
@@ -115,16 +129,54 @@ fun InstructorSessionsScreen(
                         userNames = userNames,
                         lastVisited = lastVisitedMap[session.id],
                         onJoinClick = {
-                            navController.navigate("whiteboard/${session.id}")
+                            scope.launch {
+                                val ok = sessionViewModel.checkInstructorIsWithinWorkingHours()
+                                if (!ok) {
+                                    pendingRoute = "whiteboard/${session.id}"
+                                    showConfirmOutsideHours = true
+                                } else {
+                                    navController.navigate("whiteboard/${session.id}")
+                                }
+                            }
                         },
                         onContinueClick = {
-                            navController.navigate("whiteboard/${session.id}")
+                            scope.launch {
+                                val ok = sessionViewModel.checkInstructorIsWithinWorkingHours()
+                                if (!ok) {
+                                    pendingRoute = "whiteboard/${session.id}"
+                                    showConfirmOutsideHours = true
+                                } else {
+                                    navController.navigate("whiteboard/${session.id}")
+                                }
+                            }
                         }
                     )
                 }
             }
         }
     }
+
+    if (showConfirmOutsideHours) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showConfirmOutsideHours = false },
+            title = { Text("Outside working hours") },
+            text = { Text("You are outside your defined working hours. Enter session anyway?") },
+            dismissButton = {
+                TextButton(onClick = { showConfirmOutsideHours = false }) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val route = pendingRoute
+                    showConfirmOutsideHours = false
+                    pendingRoute = null
+                    if (route != null) navController.navigate(route)
+                }) { Text("Enter") }
+            }
+        )
+    }
+
 }
 
 @Composable
@@ -134,7 +186,8 @@ fun SessionCard(
     userNames: Map<String, String>,
     lastVisited: Long?,
     onJoinClick: () -> Unit,
-    onContinueClick: () -> Unit
+    onContinueClick: () -> Unit,
+    sessionViewModel: SessionViewModel = viewModel()
 ) {
 
     val invitedNames = listOfNotNull(
@@ -142,6 +195,8 @@ fun SessionCard(
     ) + session.studentIds.mapNotNull { userNames[it] }
 
     val invitedNamesText = invitedNames.joinToString(", ")
+
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
 
     Card(
@@ -153,10 +208,25 @@ fun SessionCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "Subject: ${session.subject}",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Subject: ${session.subject}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                OutlinedButton(
+                    onClick = { showDeleteDialog = true },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            }
 
             Text(
                 text = "Users in session: $onlineCount",
@@ -198,6 +268,28 @@ fun SessionCard(
                     }
                 }
             }
+
+            if (showDeleteDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Delete Session") },
+                    text = { Text("Are you sure you want to remove this session from your list? This action will not delete it for other users.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            sessionViewModel.hideSessionForCurrentUser(session.id)
+                            showDeleteDialog = false
+                        }) {
+                            Text("Yes, Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
 
         }
     }

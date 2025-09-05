@@ -135,7 +135,6 @@ class WhiteboardViewModel : ViewModel() {
             val page = pages[pageIndex]
             _currentPage.value = page
 
-            // Prestanak slušanja prethodnih stroke-ova
             strokesListener?.remove()
             listenToStrokes(page.id)
 
@@ -381,23 +380,19 @@ class WhiteboardViewModel : ViewModel() {
         val page = _currentPage.value ?: return
         val pageId = page.id
         val sessionId = page.sessionId
-        val userId = Firebase.auth.currentUser?.uid ?: return
         val pageNumberToRemove = page.pageNumber
 
-        // Brisanje svih stroke-ova na toj stranici
         firestore.collection("drawing_strokes")
             .whereEqualTo("pageId", pageId)
             .get()
-            .addOnSuccessListener { snapshot ->
-                snapshot.documents.forEach { it.reference.delete() }
+            .addOnSuccessListener { snap ->
+                snap.documents.forEach { it.reference.delete() }
 
-                // Brisanje same stranice
                 firestore.collection("whiteboard_pages").document(pageId)
                     .delete()
                     .addOnSuccessListener {
                         Log.d("Whiteboard", "Stranica obrisana")
 
-                        // Ažuriranje page brojeva stranica koje su bile iza nje
                         firestore.collection("whiteboard_pages")
                             .whereEqualTo("sessionId", sessionId)
                             .get()
@@ -408,16 +403,45 @@ class WhiteboardViewModel : ViewModel() {
                                         if (number > pageNumberToRemove) doc to number else null
                                     }
 
-                                for ((doc, oldNumber) in pagesToUpdate) {
-                                    doc.reference.update("pageNumber", oldNumber - 1)
+                                if (pagesToUpdate.isNotEmpty()) {
+                                    pagesToUpdate.forEach { (doc, oldNumber) ->
+                                        doc.reference.update("pageNumber", oldNumber - 1)
+                                    }
                                 }
 
-                                // Ponovno učitavanje lista
-                                listenToAllPages(sessionId)
+                                firestore.collection("whiteboard_pages")
+                                    .whereEqualTo("sessionId", sessionId)
+                                    .get()
+                                    .addOnSuccessListener { refreshedSnap ->
+                                        val pages = refreshedSnap.documents.mapNotNull { d ->
+                                            d.toObject(WhiteboardPage::class.java)?.copy(id = d.id)
+                                        }.sortedBy { it.pageNumber }
+
+                                        if (pages.isEmpty()) {
+                                            createNewPage(sessionId)
+                                            _allPages.value = emptyList()
+                                            _currentPage.value = null
+                                            _currentPageIndex.value = 0
+                                            strokesListener?.remove()
+                                            return@addOnSuccessListener
+                                        }
+
+                                        val pageNumberToSelect = (pageNumberToRemove - 1).coerceAtLeast(1)
+                                        val target = pages.firstOrNull { it.pageNumber == pageNumberToSelect } ?: pages.first()
+
+                                        _allPages.value = pages
+                                        val newIndex = pages.indexOfFirst { it.id == target.id }.coerceAtLeast(0)
+                                        _currentPageIndex.value = newIndex
+                                        _currentPage.value = target
+
+                                        strokesListener?.remove()
+                                        listenToStrokes(target.id)
+                                    }
                             }
                     }
             }
     }
+
 
     fun clearCurrentPage() {
         val pageId = _currentPage.value?.id ?: return
@@ -493,7 +517,6 @@ class WhiteboardViewModel : ViewModel() {
     }
 }
 
-// Extension funkcija za pretvorbu u Map
 fun DrawingStroke.toMap(): Map<String, Any> {
     val map = mutableMapOf(
         "userId" to userId,

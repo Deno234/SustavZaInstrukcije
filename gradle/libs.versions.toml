@@ -22,6 +22,7 @@ media3CommonKtx = "1.5.1"
 dotenv-kotlin = "6.5.1"
 material = "1.12.0"
 composeMaterialNew = "1.4.1"
+coil = "2.6.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -58,6 +59,7 @@ androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-
 dotenv-kotlin = { group = "io.github.cdimascio", name = "dotenv-kotlin", version.ref = "dotenv-kotlin"}
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-compose-material = { group = "androidx.wear.compose", name = "compose-material", version.ref = "composeMaterialNew" }
+coil-android = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil"}
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.sustavzainstrukcije.ui.data.InstructionSession
 import com.example.sustavzainstrukcije.ui.data.SessionInvitation
+import com.example.sustavzainstrukcije.ui.utils.isNowWithinAnyInterval
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.database.DataSnapshot
@@ -16,6 +17,7 @@ import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class SessionViewModel : ViewModel() {
@@ -46,7 +48,6 @@ class SessionViewModel : ViewModel() {
 
 
 
-    // Kreiranje novog sessiona
     fun createSession(studentIds: List<String>, subject: String) {
         val currentUserId = auth.currentUser?.uid ?: return
         val sessionId = UUID.randomUUID().toString()
@@ -58,7 +59,6 @@ class SessionViewModel : ViewModel() {
             subject = subject,
         )
 
-        // Spremanje sjednice u Firestore
         firestore.collection("sessions").document(sessionId)
             .set(session)
             .addOnSuccessListener {
@@ -90,7 +90,6 @@ class SessionViewModel : ViewModel() {
             }
     }
 
-    // Dohvaćanje sjednice za instruktora
     fun getInstructorSessions() {
         val currentUserId = auth.currentUser?.uid ?: return
 
@@ -98,20 +97,24 @@ class SessionViewModel : ViewModel() {
             .whereEqualTo("instructorId", currentUserId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("SessionViewModel", "Error fetching sessions", e)
-                    return@addSnapshotListener
-                }
+                if (e != null) return@addSnapshotListener
 
-                val sessionsList = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
+                firestore.collection("users")
+                    .document(currentUserId)
+                    .collection("hiddenSessions")
+                    .addSnapshotListener { hiddenSnapshot, _ ->
+                        val hiddenIds = hiddenSnapshot?.documents?.map { it.id }?.toSet() ?: emptySet()
 
-                _sessions.value = sessionsList
+                        val sessionsList = snapshot?.documents?.mapNotNull { doc ->
+                            doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
+                        }?.filterNot { hiddenIds.contains(it.id) } ?: emptyList()
+
+                        _sessions.value = sessionsList
+                    }
             }
     }
 
-    // Dohvaćanje pozivnica za studenta
+
     fun getStudentInvitations() {
         val currentUserId = auth.currentUser?.uid ?: return
 
@@ -148,36 +151,49 @@ class SessionViewModel : ViewModel() {
         firestore.collection("invitations")
             .whereEqualTo("studentId", currentUserId)
             .whereEqualTo("status", "accepted")
-            .get()
-            .addOnSuccessListener { invitationSnapshot ->
-                val acceptedSessionIds = invitationSnapshot.documents.mapNotNull {
-                    it.getString("sessionId")
+            .addSnapshotListener { invitationSnapshot, e ->
+                if (e != null) {
+                    Log.e("SessionViewModel", "Error fetching invitations", e)
+                    return@addSnapshotListener
                 }
+
+                val acceptedSessionIds = invitationSnapshot?.documents?.mapNotNull {
+                    it.getString("sessionId")
+                } ?: emptyList()
 
                 if (acceptedSessionIds.isEmpty()) {
                     _sessions.value = emptyList()
-                    return@addOnSuccessListener
+                    return@addSnapshotListener
                 }
 
-                firestore.collection("sessions")
-                    .whereIn(FieldPath.documentId(), acceptedSessionIds.take(10))
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .addSnapshotListener { snapshot, e ->
-                        if (e != null) {
-                            Log.e("SessionViewModel", "Error fetching student sessions", e)
-                            return@addSnapshotListener
-                        }
+                firestore.collection("users")
+                    .document(currentUserId)
+                    .collection("hiddenSessions")
+                    .addSnapshotListener { hiddenSnapshot, _ ->
+                        val hiddenIds = hiddenSnapshot?.documents?.map { it.id }?.toSet() ?: emptySet()
 
-                        val sessionsList = snapshot?.documents?.mapNotNull { doc ->
-                            doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
-                        } ?: emptyList()
+                        firestore.collection("sessions")
+                            .whereIn(FieldPath.documentId(), acceptedSessionIds.take(10))
+                            .orderBy("createdAt", Query.Direction.DESCENDING)
+                            .addSnapshotListener { snapshot, e2 ->
+                                if (e2 != null) {
+                                    Log.e("SessionViewModel", "Error fetching student sessions", e2)
+                                    return@addSnapshotListener
+                                }
 
-                        _sessions.value = sessionsList
+                                val sessionsList = snapshot?.documents?.mapNotNull { doc ->
+                                    doc.toObject(InstructionSession::class.java)?.copy(id = doc.id)
+                                }?.filterNot { hiddenIds.contains(it.id) } ?: emptyList()
 
-                        listenToOnlineUsersForSessions(sessionsList.map { it.id })
+                                _sessions.value = sessionsList
+
+                                listenToOnlineUsersForSessions(sessionsList.map { it.id })
+                            }
                     }
             }
     }
+
+
 
 
 
@@ -198,8 +214,8 @@ class SessionViewModel : ViewModel() {
     fun setUserOnline(sessionId: String) {
         val userId = auth.currentUser?.uid ?: return
         val ref = db.getReference("online_users/$sessionId/$userId")
-        ref.setValue(true)
         ref.onDisconnect().removeValue()
+        ref.setValue(true)
 
         firestore.collection("sessions").document(sessionId)
             .get().addOnSuccessListener { snapshot ->
@@ -306,6 +322,30 @@ class SessionViewModel : ViewModel() {
                 onComplete()
             }
     }
+
+    suspend fun checkInstructorIsWithinWorkingHours(): Boolean {
+        val userId = auth.currentUser?.uid ?: return false
+        val snap = Firebase.firestore.collection("users").document(userId).get().await()
+        val hours = snap.get("availableHours") as? Map<String, List<String>> ?: emptyMap()
+        return isNowWithinAnyInterval(hours)
+    }
+
+    fun hideSessionForCurrentUser(sessionId: String) {
+        val userId = auth.currentUser?.uid ?: return
+
+        firestore.collection("users")
+            .document(userId)
+            .collection("hiddenSessions")
+            .document(sessionId)
+            .set(mapOf("hidden" to true))
+            .addOnSuccessListener {
+                Log.d("SessionViewModel", "Session $sessionId hidden for $userId")
+            }
+            .addOnFailureListener { e ->
+                Log.e("SessionViewModel", "Failed to hide session", e)
+            }
+    }
+
 
 
 

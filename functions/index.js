@@ -144,64 +144,55 @@ exports.sendNewMessageNotification = onValueCreated(
     },
 );
 
-// Dodaj ovu funkciju za slanje pozivnica
 exports.sendSessionInvitation = onDocumentCreated(
-    {
-      document: "invitations/{invitationId}",
-      region: "europe-west1",
-    },
+    {document: "invitations/{invitationId}", region: "europe-west1"},
     async (event) => {
       const invitation = event.data.data();
-      const invitationId = event.params.invitationId;
+      const studentIds = Array.isArray(invitation.studentIds) ?
+        invitation.studentIds :
+        [invitation.studentId]; // fallback na staru logiku
 
-      console.log("New session invitation created:", invitationId);
+      const instrDoc = await firestore.collection("users")
+          .doc(invitation.instructorId).get();
+      const instructorName = instrDoc.exists && instrDoc.data().name ?
+        instrDoc.data().name : "Instruktor";
 
-      try {
-        // Dohvati FCM token studenta
+      const messaging = getMessaging();
+
+      for (const studentId of studentIds) {
         const studentDoc = await firestore.collection("users")
-            .doc(invitation.studentId).get();
-        if (!studentDoc.exists) {
-          console.log("Student not found:", invitation.studentId);
-          return null;
+            .doc(studentId).get();
+        if (!studentDoc.exists) continue;
+
+        let recipientTokens = [];
+        const userData = studentDoc.data();
+        if (userData.fcmToken) {
+          recipientTokens.push(userData.fcmToken);
+        } else if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
+          recipientTokens = userData.fcmTokens;
         }
+        if (recipientTokens.length === 0) continue;
 
-        const studentData = studentDoc.data();
-        const fcmToken = studentData.fcmToken;
-
-        if (!fcmToken) {
-          console.log("No FCM token for student:", invitation.studentId);
-          return null;
-        }
-
-        // Dohvati ime instruktora
-        const instructorDoc = await firestore.collection("users")
-            .doc(invitation.instructorId).get();
-        const instructorName = instructorDoc.exists ?
-        instructorDoc.data().name : "Instruktor";
-
-        // Pošalji notifikaciju
-        const message = {
+        const messages = recipientTokens.map((token) => ({
+          token,
           data: {
             type: "session_invitation",
+            navigateTo: "StudentInvitations",
             sessionId: invitation.sessionId,
             instructorId: invitation.instructorId,
             subject: invitation.subject,
-            title: `Pozivnica za session`,
-            body: `${instructorName} vas poziva na 
-            session iz predmeta ${invitation.subject}`,
-            navigateTo: "StudentInvitations",
           },
-          token: fcmToken,
-        };
+          notification: {
+            title: "Pozivnica za sjednicu",
+            body: `${instructorName} vas poziva na ${invitation.subject}`,
+          },
+          android: {priority: "high"},
+        }));
 
-        const messaging = getMessaging();
-        const response = await messaging.send(message);
-        console.log("Session invitation notification sent:", response);
-      } catch (error) {
-        console.error("Error sending session invitation:", error);
+        await messaging.sendEach(messages);
       }
-
       return null;
     },
 );
+
 
