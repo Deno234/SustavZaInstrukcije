@@ -48,7 +48,6 @@ class SessionViewModel : ViewModel() {
 
 
 
-    // Kreiranje novog sessiona
     fun createSession(studentIds: List<String>, subject: String) {
         val currentUserId = auth.currentUser?.uid ?: return
         val sessionId = UUID.randomUUID().toString()
@@ -60,7 +59,6 @@ class SessionViewModel : ViewModel() {
             subject = subject,
         )
 
-        // Spremanje sjednice u Firestore
         firestore.collection("sessions").document(sessionId)
             .set(session)
             .addOnSuccessListener {
@@ -92,7 +90,6 @@ class SessionViewModel : ViewModel() {
             }
     }
 
-    // Dohvaćanje sjednice za instruktora
     fun getInstructorSessions() {
         val currentUserId = auth.currentUser?.uid ?: return
 
@@ -118,7 +115,6 @@ class SessionViewModel : ViewModel() {
     }
 
 
-    // Dohvaćanje pozivnica za studenta
     fun getStudentInvitations() {
         val currentUserId = auth.currentUser?.uid ?: return
 

@@ -70,7 +70,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 }
 
                 else -> {
-                    // postojeća logika za chat
                     val title = remoteMessage.data["title"] ?: "Nova poruka"
                     val body = remoteMessage.data["body"] ?: ""
                     val chatId = remoteMessage.data["chatId"]

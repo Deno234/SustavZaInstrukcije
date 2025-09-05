@@ -135,7 +135,6 @@ class WhiteboardViewModel : ViewModel() {
             val page = pages[pageIndex]
             _currentPage.value = page
 
-            // Prestanak slušanja prethodnih stroke-ova
             strokesListener?.remove()
             listenToStrokes(page.id)
 
@@ -518,7 +517,6 @@ class WhiteboardViewModel : ViewModel() {
     }
 }
 
-// Extension funkcija za pretvorbu u Map
 fun DrawingStroke.toMap(): Map<String, Any> {
     val map = mutableMapOf(
         "userId" to userId,

@@ -59,7 +59,6 @@ fun ProfileScreen(
         uri?.let { authViewModel.updateProfilePicture(it) }
     }
 
-    // dialog states
     var showAddSubjectDialog by remember { mutableStateOf(false) }
     var showCommentsDialog by remember { mutableStateOf(false) }
     var selectedSubject by remember { mutableStateOf<String?>(null) }
@@ -108,7 +107,6 @@ fun ProfileScreen(
                 .padding(padding),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // profile card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -163,7 +161,6 @@ fun ProfileScreen(
                 }
             }
 
-            // name
             item {
                 OutlinedTextField(
                     value = name,
@@ -176,7 +173,6 @@ fun ProfileScreen(
                 )
             }
 
-            // subjects + available hours
             if (currentUser?.role == "instructor") {
                 item {
                     Card(
@@ -227,7 +223,6 @@ fun ProfileScreen(
                 }
             }
 
-            // save changes button
             item {
                 Button(
                     onClick = {
@@ -257,7 +252,6 @@ fun ProfileScreen(
                 }
             }
 
-            // comments & ratings
             currentUser?.let { user ->
                 if (user.role == "instructor") {
                     item {
@@ -274,7 +268,6 @@ fun ProfileScreen(
         }
     }
 
-    // dialogs
     if (showAddSubjectDialog) {
         var newSubject by remember { mutableStateOf("") }
         AlertDialog(
@@ -318,7 +311,6 @@ fun ProfileScreen(
             title = { Text("Comments & Ratings") },
             text = {
                 Column {
-                    // filter
                     var expanded by remember { mutableStateOf(false) }
                     Box {
                         OutlinedButton(onClick = { expanded = true }) {
